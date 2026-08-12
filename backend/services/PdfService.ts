@@ -138,6 +138,9 @@ export class PdfService {
             timeout: 30000 
         });
 
+        // Wait for web fonts to load completely
+        await page.evaluateHandle('document.fonts.ready');
+
         // Generate PDF as Uint8Array
         const pdfData = await page.pdf({
           format: 'A4',

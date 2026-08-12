@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
-import { DollarSign, Activity, Wallet, Loader2, Check, ChevronsUpDown, BadgePercent } from "lucide-react";
+import { DollarSign, Activity, Wallet, Loader2, Check, ChevronsUpDown, BadgePercent, Calendar as CalendarIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,6 +16,13 @@ import { Badge } from "@/components/ui/badge";
 import { Command, CommandGroup, CommandItem } from "@/components/ui/command";
 import { ChartCard } from "@/components/dashboard/ChartCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { DateRange } from "react-day-picker";
+import { 
+  format, isWithinInterval, startOfDay, endOfDay, subDays,
+  startOfWeek, endOfWeek, subWeeks, startOfMonth, endOfMonth, 
+  subMonths, startOfQuarter, endOfQuarter, startOfYear, endOfYear
+} from "date-fns";
 
 // --- DATE HELPERS ---
 
@@ -26,10 +33,17 @@ const getFinancialYearDates = (startYear: number) => {
     return { from, to };
 };
 
-const getOverviewDates = (filter: string) => {
+const getOverviewDates = (filter: string, dateRange?: DateRange) => {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
+
+    if (filter === 'custom' && dateRange?.from) {
+        return {
+            from: startOfDay(dateRange.from),
+            to: dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from)
+        };
+    }
 
     if (filter.startsWith('FY-')) {
         const startYear = parseInt(filter.split('-')[1]);
@@ -37,26 +51,51 @@ const getOverviewDates = (filter: string) => {
     }
 
     switch (filter) {
-        case 'daily': 
+        case 'today': 
             return { 
-                from: new Date(currentYear, currentMonth, now.getDate(), 0, 0, 0),
-                to: new Date(currentYear, currentMonth, now.getDate(), 23, 59, 59)
+                from: startOfDay(now),
+                to: endOfDay(now)
+            };
+        case 'yesterday': 
+            const yesterday = subDays(now, 1);
+            return { 
+                from: startOfDay(yesterday),
+                to: endOfDay(yesterday)
+            };
+        case 'this_week': 
+            return { 
+                from: startOfWeek(now, { weekStartsOn: 1 }),
+                to: endOfWeek(now, { weekStartsOn: 1 })
+            };
+        case 'last_week': 
+            const lastWeek = subWeeks(now, 1);
+            return { 
+                from: startOfWeek(lastWeek, { weekStartsOn: 1 }),
+                to: endOfWeek(lastWeek, { weekStartsOn: 1 })
             };
         case 'monthly': 
+        case 'this_month': 
             return { 
-                from: new Date(currentYear, currentMonth, 1), 
-                to: new Date(currentYear, currentMonth + 1, 0, 23, 59, 59) 
+                from: startOfMonth(now), 
+                to: endOfMonth(now) 
+            };
+        case 'last_month': 
+            const lastMonth = subMonths(now, 1);
+            return { 
+                from: startOfMonth(lastMonth), 
+                to: endOfMonth(lastMonth) 
             };
         case 'quarterly': 
-            const qStartMonth = Math.floor(currentMonth / 3) * 3;
+        case 'this_quarter': 
             return { 
-                from: new Date(currentYear, qStartMonth, 1), 
-                to: new Date(currentYear, qStartMonth + 3, 0, 23, 59, 59) 
+                from: startOfQuarter(now), 
+                to: endOfQuarter(now) 
             };
         case 'yearly': 
+        case 'this_year': 
             return { 
-                from: new Date(currentYear, 0, 1), 
-                to: new Date(currentYear, 11, 31, 23, 59, 59) 
+                from: startOfYear(now), 
+                to: endOfYear(now) 
             };
         case 'all': 
             return { 
@@ -65,8 +104,8 @@ const getOverviewDates = (filter: string) => {
             };
         default: 
             return { 
-                from: new Date(currentYear, currentMonth, 1), 
-                to: new Date(currentYear, currentMonth + 1, 0, 23, 59, 59) 
+                from: startOfMonth(now), 
+                to: endOfMonth(now) 
             };
     }
 };
@@ -98,196 +137,130 @@ export default function DashboardPage() {
   const initialFyStart = currentMonth < 3 ? currentYear - 1 : currentYear;
   
   // --- STATE MANAGEMENT ---
-  
   const [activeYears, setActiveYears] = useState<number[]>([initialFyStart]); 
   const [overviewFilter, setOverviewFilter] = useState<string>("monthly");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [summary, setSummary] = useState<any>({});
 
-  const [comparisonYears, setComparisonYears] = useState<number[]>([
-    initialFyStart, initialFyStart - 1, initialFyStart - 2, initialFyStart - 3
-  ]);
+  const [comparisonYears, setComparisonYears] = useState<number[]>([]);
   const [isYearDropdownOpen, setIsYearDropdownOpen] = useState(false);
   const [yearlyData, setYearlyData] = useState<any[]>([]);
 
-  const [netBalanceFy, setNetBalanceFy] = useState<string>(initialFyStart.toString());
-  const [netBalanceData, setNetBalanceData] = useState<any[]>([]);
-
-  const [monthlyFy, setMonthlyFy] = useState<string>(initialFyStart.toString());
+  // Unified Dashboard Data (replaces separate fetches)
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
-
-  const [expenseFy, setExpenseFy] = useState<string>(initialFyStart.toString());
   const [expenseTable, setExpenseTable] = useState<any[]>([]);
   const [expenseColumns, setExpenseColumns] = useState<string[]>([]);
-
-  const [recentFy, setRecentFy] = useState<string>(initialFyStart.toString());
-  const [recentData, setRecentData] = useState<any[]>([]);
-
   const [sharedInvoices, setSharedInvoices] = useState<any[]>([]);
+  
   const [loading, setLoading] = useState(true);
+  const [loadingStats, setLoadingStats] = useState(false);
 
   // Hydration fix
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // --- DATA FETCHING ---
-
+  // --- INITIAL LOAD ---
   useEffect(() => {
     const fetchInit = async () => {
-        const dates = getOverviewDates(overviewFilter);
-        const params = new URLSearchParams({
-            from: dates.from.toISOString(),
-            to: dates.to.toISOString(),
-            sections: 'summary,availableYears'
-        });
-
         try {
+            const dates = getOverviewDates(overviewFilter, dateRange);
+            const params = new URLSearchParams({
+                from: dates.from.toISOString(),
+                to: dates.to.toISOString(),
+                sections: 'summary,availableYears,monthlyStats,expenseTable'
+            });
+
             const [statsRes, sharedRes] = await Promise.all([
                 api.get(`/dashboard/stats?${params}`),
                 api.get('/invoices/shared')
             ]);
             
             setSummary(statsRes.data.summary);
-            setSharedInvoices(sharedRes.data);
+            setMonthlyData(statsRes.data.charts.monthlyStats || []);
+            setExpenseTable(statsRes.data.tables.expenseTable || []);
+            setExpenseColumns(statsRes.data.tables.expenseColumns || []);
+            setSharedInvoices(sharedRes.data || []);
 
             if (statsRes.data.availableYears && statsRes.data.availableYears.length > 0) {
-                setActiveYears(statsRes.data.availableYears.map((y: any) => Number(y)));
+                const years = statsRes.data.availableYears.map((y: any) => Number(y));
+                setActiveYears(years);
+                // Initialize comparison with up to 4 recent years
+                setComparisonYears(years.slice(0, 4));
             }
-        } catch (e) { console.error(e); } 
-        finally { setLoading(false); }
+        } catch (e) { 
+            console.error("Dashboard initial load failed", e); 
+        } finally { 
+            setLoading(false); 
+        }
     };
     fetchInit();
   }, []);
 
-  useEffect(() => {
-    if (loading) return;
-    const fetchSummary = async () => {
-        const dates = getOverviewDates(overviewFilter);
+  // --- GLOBAL FILTER HANDLER ---
+  const handleFilterChange = async (filter: string, range?: DateRange) => {
+    setOverviewFilter(filter);
+    if (range) {
+        setDateRange(range);
+    } else if (filter !== 'custom') {
+        setDateRange(undefined);
+    }
+
+    try {
+        setLoadingStats(true);
+        const dates = getOverviewDates(filter, range || dateRange);
         const params = new URLSearchParams({
             from: dates.from.toISOString(),
             to: dates.to.toISOString(),
-            sections: 'summary'
+            sections: 'summary,monthlyStats,expenseTable'
         });
-        try {
-            const res = await api.get(`/dashboard/stats?${params}`);
-            setSummary(res.data.summary);
-        } catch (e) { console.error(e); }
-    };
-    fetchSummary();
-  }, [overviewFilter]);
 
+        const res = await api.get(`/dashboard/stats?${params}`);
+        setSummary(res.data.summary);
+        setMonthlyData(res.data.charts.monthlyStats || []);
+        setExpenseTable(res.data.tables.expenseTable || []);
+        setExpenseColumns(res.data.tables.expenseColumns || []);
+    } catch (e) {
+        console.error("Failed to load filtered stats", e);
+    } finally {
+        setLoadingStats(false);
+    }
+  };
+
+  // --- FETCH YEARLY COMPARISON ---
   useEffect(() => {
+    if (loading || comparisonYears.length === 0) return;
     const fetchYearly = async () => {
-        if (comparisonYears.length === 0) return;
         try {
             const params = new URLSearchParams({
                 years: comparisonYears.join(','),
                 sections: 'yearlyComparison'
             });
             const res = await api.get(`/dashboard/stats?${params}`);
-            setYearlyData(res.data.charts.yearlyComparison);
+            setYearlyData(res.data.charts.yearlyComparison || []);
         } catch (e) { console.error(e); }
     };
     fetchYearly();
-  }, [comparisonYears]);
+  }, [comparisonYears, loading]);
 
-  useEffect(() => {
-    const fetchNet = async () => {
-        const fyDates = getFinancialYearDates(parseInt(netBalanceFy, 10));
-        const params = new URLSearchParams({
-            from: fyDates.from.toISOString(),
-            to: fyDates.to.toISOString(),
-            sections: 'monthlyStats'
-        });
-        const res = await api.get(`/dashboard/stats?${params}`);
-        setNetBalanceData(res.data.charts.monthlyStats);
-    };
-    fetchNet();
-  }, [netBalanceFy]);
-
-  useEffect(() => {
-    const fetchMonthly = async () => {
-        const fyDates = getFinancialYearDates(parseInt(monthlyFy, 10));
-        const params = new URLSearchParams({
-            from: fyDates.from.toISOString(),
-            to: fyDates.to.toISOString(),
-            sections: 'monthlyStats'
-        });
-        const res = await api.get(`/dashboard/stats?${params}`);
-        setMonthlyData(res.data.charts.monthlyStats);
-    };
-    fetchMonthly();
-  }, [monthlyFy]);
-
-  useEffect(() => {
-    const fetchExpenses = async () => {
-        const fyDates = getFinancialYearDates(parseInt(expenseFy, 10));
-        const params = new URLSearchParams({
-            from: fyDates.from.toISOString(),
-            to: fyDates.to.toISOString(),
-            sections: 'expenseTable'
-        });
-        const res = await api.get(`/dashboard/stats?${params}`);
-        setExpenseTable(res.data.tables.expenseTable);
-        setExpenseColumns(res.data.tables.expenseColumns);
-    };
-    fetchExpenses();
-  }, [expenseFy]);
-
-  useEffect(() => {
-    let isMounted = true;
-    const ctrl = new AbortController();
-
-    const fetchRecent = async () => {
-        if (!isMounted) return;
-        if (activeYears.length === 0) return;
-
-        const minYear = Math.min(...activeYears);
-        const maxYear = Math.max(...activeYears);
-        
-        const start = getFinancialYearDates(minYear).from;
-        const end = getFinancialYearDates(maxYear).to;
-
-        const params = new URLSearchParams({
-            from: start.toISOString(),
-            to: end.toISOString(),
-            sections: 'monthlyStats'
-        });
-        
-        try {
-            const res = await api.get(`/dashboard/stats?${params}`, {
-              signal: ctrl.signal
-            } as any);
-            if (!isMounted) return;
-            setRecentData(res.data.charts.monthlyStats || []);
-        } catch (e: any) {
-            if (e && e.name === 'AbortError') return;
-            console.error('fetchRecent failed', e);
-            if (isMounted) setRecentData([]);
-        }
-    };
-    fetchRecent();
-
-    return () => {
-      isMounted = false;
-      ctrl.abort();
-    };
-  }, [activeYears]);
-
-
-  // --- HELPERS ---
   const toggleComparisonYear = (year: number) => {
       setComparisonYears(prev => prev.includes(year) ? prev.filter(y => y !== year) : [...prev, year]);
   };
 
+  // Enforce 2 decimal places formatted for currency (Indian numbering format)
   const formatCurrency = (val: number) => 
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val || 0);
+    new Intl.NumberFormat('en-IN', { 
+        style: 'currency', 
+        currency: 'INR', 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+    }).format(val || 0);
 
   const CustomizedAxisTick = (props: any) => {
     const { x, y, payload } = props;
     return (
       <g transform={`translate(${x},${y})`}>
-        <text x={0} y={0} dy={16} textAnchor="end" fill="#666" transform="rotate(-35)" fontSize={12}>{payload.value}</text>
+        <text x={0} y={0} dy={16} textAnchor="end" fill="#666" transform="rotate(-35)" fontSize={11}>{payload.value}</text>
       </g>
     );
   };
@@ -305,78 +278,53 @@ export default function DashboardPage() {
   }, [expenseTable, expenseColumns]);
 
   // --- CUMULATIVE BALANCE CALCULATION ---
-  const recentHistoryWithBalance = useMemo(() => {
-    if (!recentData || recentData.length === 0) return [];
+  const historyWithBalance = useMemo(() => {
+    if (!monthlyData || monthlyData.length === 0) return [];
     
-    let runningBalance = 0;
-
-    const sortedHistory = [...recentData].sort((a, b) => {
+    // The backend already returns cumulative balance starting from opening balance,
+    // so we can use the backend balance directly or verify it.
+    return [...monthlyData].sort((a, b) => {
         const dateA = parseFlexibleDate(a.date || a.month);
         const dateB = parseFlexibleDate(b.date || b.month);
-        const timeA = isNaN(dateA.getTime()) ? 0 : dateA.getTime();
-        const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime();
-        return timeA - timeB;
+        return dateA.getTime() - dateB.getTime();
     });
-
-    const fullHistory = sortedHistory.map((month: any) => {
-        const netForMonth = (Number(month.revenue) || 0) - (Number(month.expense) || 0);
-        runningBalance += netForMonth;
-        return {
-            ...month,
-            netForMonth,
-            runningBalance 
-        };
-    });
-
-    const targetYear = parseInt(recentFy, 10);
-
-    return fullHistory.filter((item: any) => {
-        const itemDate = parseFlexibleDate(item.date || item.month || "");
-        if (isNaN(itemDate.getTime())) return false;
-
-        // Add 12 hours buffer to handle timezone rollovers
-        const adjustedDate = new Date(itemDate.getTime() + 1000 * 60 * 60 * 12);
-        const month = adjustedDate.getMonth();
-        const year = adjustedDate.getFullYear();
-
-        if (year === targetYear && month >= 3) return true;
-        if (year === targetYear + 1 && month <= 2) return true;
-
-        return false;
-    });
-
-  }, [recentData, recentFy]);
+  }, [monthlyData]);
 
   if (!mounted) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>;
   if (loading) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>;
 
   return (
-    // OPTIMIZED: Padding reduced for mobile (p-4) to save width, min-w-0 added to prevent flex child overflow
     <div className="p-4 md:p-6 space-y-6 w-full max-w-[100vw] overflow-x-hidden">
       
-      {/* HEADER WITH FILTER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* HEADER WITH FILTERS */}
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <div>
             <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-            <p className="text-muted-foreground">Financial Overview</p>
+            <p className="text-muted-foreground font-medium">Real-time financial analytics and metric tracking.</p>
         </div>
 
-        <div className="flex items-center gap-2 self-end md:self-auto">
-            <span className="text-sm font-medium text-muted-foreground hidden md:inline">Overview for:</span>
-            <Select value={overviewFilter} onValueChange={setOverviewFilter}>
-                <SelectTrigger className="h-9 w-[180px] bg-background border-input shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
+            <span className="text-sm font-semibold text-muted-foreground hidden md:inline">Filter By:</span>
+            
+            {/* Global Date Selector Menu */}
+            <Select value={overviewFilter} onValueChange={(val) => handleFilterChange(val)}>
+                <SelectTrigger className="h-9 w-[180px] bg-background border-input shadow-sm font-semibold">
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                    <div className="max-h-[300px] overflow-y-auto p-1">
-                        <p className="text-xs font-semibold text-muted-foreground px-2 py-1.5">Standard Ranges</p>
-                        <SelectItem value="daily">Daily (Today)</SelectItem>
-                        <SelectItem value="monthly">This Month</SelectItem>
-                        <SelectItem value="quarterly">This Quarter</SelectItem>
-                        <SelectItem value="yearly">This Year (Jan-Dec)</SelectItem>
+                    <div className="max-h-[320px] overflow-y-auto p-1">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1.5 tracking-wider">Presets</p>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="yesterday">Yesterday</SelectItem>
+                        <SelectItem value="this_week">This Week</SelectItem>
+                        <SelectItem value="last_week">Last Week</SelectItem>
+                        <SelectItem value="this_month">This Month</SelectItem>
+                        <SelectItem value="last_month">Last Month</SelectItem>
+                        <SelectItem value="this_quarter">This Quarter</SelectItem>
+                        <SelectItem value="this_year">This Year (Jan-Dec)</SelectItem>
                         <SelectItem value="all">All Time</SelectItem>
                         
-                        <p className="text-xs font-semibold text-muted-foreground px-2 py-1.5 mt-2">Financial Years</p>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1.5 mt-2 tracking-wider">Financial Years</p>
                         {activeYears.map(year => (
                             <SelectItem key={year} value={`FY-${year}`}>
                                 FY {year}-{year.toString().slice(-2) === '99' ? '00' : (year+1).toString().slice(-2)}
@@ -385,17 +333,57 @@ export default function DashboardPage() {
                     </div>
                 </SelectContent>
             </Select>
+
+            <span className="text-muted-foreground text-xs font-black px-1">OR</span>
+
+            {/* Custom Range Calendar Date Picker */}
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className={cn("h-9 w-[220px] justify-start text-left font-semibold", !dateRange && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRange?.from ? (
+                            dateRange.to ? (
+                                <>{format(dateRange.from, "LLL dd, yyyy")} - {format(dateRange.to, "LLL dd, yyyy")}</>
+                            ) : format(dateRange.from, "LLL dd, yyyy")
+                        ) : <span>Custom Date Range</span>}
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                    <Calendar
+                        initialFocus
+                        mode="range"
+                        defaultMonth={dateRange?.from}
+                        selected={dateRange}
+                        onSelect={(range) => {
+                            if (range) {
+                                handleFilterChange('custom', range);
+                            }
+                        }}
+                        numberOfMonths={2}
+                    />
+                </PopoverContent>
+            </Popover>
+
+            {/* Clear Filter Button */}
+            {(dateRange || overviewFilter !== 'monthly') && (
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={() => handleFilterChange('monthly')}>
+                    <X className="w-4 h-4" />
+                </Button>
+            )}
+
+            {loadingStats && <Loader2 className="animate-spin text-primary h-5 w-5 ml-2" />}
         </div>
       </div>
       
-      {/* 1. TOP METRICS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 min-w-0">
+      {/* 1. TOP METRICS CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 min-w-0">
         <MetricCard 
             title="Total Revenue" 
             value={summary?.totalRevenue || 0} 
             icon={<DollarSign />} 
             color="text-blue-600" 
             bg="bg-blue-50 dark:bg-blue-900/20" 
+            formatCurrency={formatCurrency}
         />
         <MetricCard 
             title="Total Expenses" 
@@ -403,6 +391,7 @@ export default function DashboardPage() {
             icon={<Wallet />} 
             color="text-red-600" 
             bg="bg-red-50 dark:bg-red-900/20" 
+            formatCurrency={formatCurrency}
         />
         <MetricCard 
             title="Net Profit" 
@@ -410,13 +399,15 @@ export default function DashboardPage() {
             icon={<Activity />} 
             color="text-green-600" 
             bg="bg-green-50 dark:bg-green-900/20" 
+            formatCurrency={formatCurrency}
         />
         <MetricCard 
-            title="Avg Sale" 
+            title="Avg Monthly Sale" 
             value={summary?.avgSale || 0} 
             icon={<BadgePercent />} 
             color="text-indigo-600" 
             bg="bg-indigo-50 dark:bg-indigo-900/20" 
+            formatCurrency={formatCurrency}
         />
       </div>
 
@@ -431,7 +422,7 @@ export default function DashboardPage() {
             action={
                 <Popover open={isYearDropdownOpen} onOpenChange={setIsYearDropdownOpen}>
                     <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-8 border-dashed">
+                        <Button variant="outline" size="sm" className="h-8 border-dashed font-semibold">
                             Select Years <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
                         </Button>
                     </PopoverTrigger>
@@ -456,7 +447,7 @@ export default function DashboardPage() {
                 <BarChart data={yearlyData} margin={{ bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis dataKey="year" interval={0} tick={<CustomizedAxisTick />} height={60} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
-                    <YAxis fontSize={12} stroke="hsl(var(--muted-foreground))" tickFormatter={(val) => `₹${val/1000}k`} tickLine={false} axisLine={false} width={40} />
+                    <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickFormatter={(val) => `₹${val/1000}k`} tickLine={false} axisLine={false} width={45} />
                     <Tooltip cursor={{ fill: 'hsl(var(--muted)/0.2)' }} contentStyle={tooltipStyle} formatter={(val: number) => formatCurrency(val)} />
                     <Bar dataKey="total" name="Revenue" fill="hsl(var(--primary))" radius={[4,4,0,0]} />
                 </BarChart>
@@ -467,22 +458,10 @@ export default function DashboardPage() {
         <ChartCard 
             className="min-w-0 overflow-hidden"
             title="Net Balance Trend" 
-            description={`Cumulative for FY ${netBalanceFy}-${parseInt(netBalanceFy)+1}`}
-            action={
-                <Select value={netBalanceFy} onValueChange={setNetBalanceFy}>
-                    <SelectTrigger className="h-8 w-[140px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <div className="max-h-[300px] overflow-y-auto">
-                         {activeYears.map(y => (
-                            <SelectItem key={y} value={y.toString()}>FY {y}-{y.toString().slice(-2) === '99' ? '00' : (y+1).toString().slice(-2)}</SelectItem>
-                         ))}
-                        </div>
-                    </SelectContent>
-                </Select>
-            }
+            description="Cumulative business assets over selected range"
         >
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                <AreaChart data={netBalanceData}>
+                <AreaChart data={historyWithBalance}>
                     <defs>
                         <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
@@ -490,9 +469,9 @@ export default function DashboardPage() {
                         </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" fontSize={12} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} dy={10} />
-                    <YAxis fontSize={12} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} width={40} />
-                    <Tooltip contentStyle={tooltipStyle} />
+                    <XAxis dataKey="month" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} dy={10} />
+                    <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val/1000}k`} width={45} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(val: number) => formatCurrency(val)} />
                     <Area type="monotone" dataKey="balance" name="Net Balance" stroke="#10b981" fillOpacity={1} fill="url(#colorBalance)" strokeWidth={2} />
                 </AreaChart>
             </ResponsiveContainer>
@@ -504,27 +483,15 @@ export default function DashboardPage() {
         <ChartCard 
             className="min-w-0 overflow-hidden"
             title="Monthly Performance" 
-            description={`Revenue vs Expenses (FY ${monthlyFy}-${parseInt(monthlyFy)+1})`}
-            action={
-                <Select value={monthlyFy} onValueChange={setMonthlyFy}>
-                    <SelectTrigger className="h-8 w-[140px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <div className="max-h-[300px] overflow-y-auto">
-                        {activeYears.map(y => (
-                            <SelectItem key={y} value={y.toString()}>FY {y}-{y.toString().slice(-2) === '99' ? '00' : (y+1).toString().slice(-2)}</SelectItem>
-                        ))}
-                        </div>
-                    </SelectContent>
-                </Select>
-            }
+            description="Issued Sales Invoices vs Total Expenses"
         >
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                <BarChart data={monthlyData}>
+                <BarChart data={historyWithBalance}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" fontSize={12} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} dy={10} />
-                    <YAxis fontSize={12} stroke="hsl(var(--muted-foreground))" tickFormatter={(val) => `₹${val/1000}k`} tickLine={false} axisLine={false} width={40} />
-                    <Tooltip cursor={{fill: 'hsl(var(--muted)/0.2)'}} contentStyle={tooltipStyle} />
-                    <Legend wrapperStyle={{paddingTop: '20px'}} />
+                    <XAxis dataKey="month" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} dy={10} />
+                    <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickFormatter={(val) => `₹${val/1000}k`} tickLine={false} axisLine={false} width={45} />
+                    <Tooltip cursor={{fill: 'hsl(var(--muted)/0.2)'}} contentStyle={tooltipStyle} formatter={(val: number) => formatCurrency(val)} />
+                    <Legend wrapperStyle={{paddingTop: '20px', fontSize: '12px'}} />
                     <Bar dataKey="revenue" name="Sales" fill="hsl(var(--primary))" radius={[4,4,0,0]} />
                     <Bar dataKey="expense" name="Expenses" fill="hsl(var(--destructive))" radius={[4,4,0,0]} />
                 </BarChart>
@@ -532,62 +499,52 @@ export default function DashboardPage() {
         </ChartCard>
       </div>
 
-      {/* 4. EXPENSE TABLE */}
-      <Card className="shadow-horizon border-none bg-card overflow-hidden min-w-0">
+      {/* 4. EXPENSE breakdowns */}
+      <Card className="shadow-sm border border-border/50 bg-card overflow-hidden min-w-0">
         <CardHeader className="flex flex-row items-center justify-between pb-4">
             <div className="space-y-1">
                 <CardTitle>Expense Breakdown</CardTitle>
-                <CardDescription>FY {expenseFy}-{parseInt(expenseFy)+1}</CardDescription>
+                <CardDescription>Granular expense analysis for the filtered period</CardDescription>
             </div>
-            <Select value={expenseFy} onValueChange={setExpenseFy}>
-                <SelectTrigger className="h-8 w-[120px] md:w-[140px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                    <div className="max-h-[300px] overflow-y-auto">
-                     {activeYears.map(y => (
-                        <SelectItem key={y} value={y.toString()}>FY {y}-{y.toString().slice(-2) === '99' ? '00' : (y+1).toString().slice(-2)}</SelectItem>
-                     ))}
-                    </div>
-                </SelectContent>
-            </Select>
         </CardHeader>
         
         <CardContent className="p-0 overflow-x-auto md:p-6">
             <Table>
                 <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
-                        <TableHead className="w-[150px] md:w-[200px] font-bold">Category</TableHead>
-                        {expenseColumns.map((col: string) => <TableHead key={col} className="text-right whitespace-nowrap px-3">{col}</TableHead>)}
+                        <TableHead className="w-[150px] md:w-[200px] font-bold text-foreground">Category</TableHead>
+                        {expenseColumns.map((col: string) => <TableHead key={col} className="text-right whitespace-nowrap px-3 text-foreground font-semibold">{col}</TableHead>)}
                         <TableHead className="text-right font-bold text-foreground px-3">Total</TableHead>
                         <TableHead className="text-right font-bold text-foreground px-3">Avg</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {expenseTable.length === 0 ? (
-                        <TableRow><TableCell colSpan={expenseColumns.length + 3} className="text-center py-8">No expense data found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={expenseColumns.length + 3} className="text-center py-10 text-muted-foreground font-semibold">No expense data found in this range.</TableCell></TableRow>
                     ) : expenseTable.map((row: any, i: number) => (
                         <TableRow key={i}>
-                            <TableCell className="font-medium whitespace-nowrap">{row.category}</TableCell>
+                            <TableCell className="font-semibold text-foreground whitespace-nowrap">{row.category}</TableCell>
                             {expenseColumns.map((col: string) => (
-                                <TableCell key={col} className="text-right text-muted-foreground whitespace-nowrap">{row[col] ? formatCurrency(row[col]) : '-'}</TableCell>
+                                <TableCell key={col} className="text-right text-muted-foreground whitespace-nowrap font-medium">{row[col] ? formatCurrency(row[col]) : '-'}</TableCell>
                             ))}
                             <TableCell className="text-right font-bold text-foreground bg-muted/20 whitespace-nowrap">{formatCurrency(row.total)}</TableCell>
-                            <TableCell className="text-right font-medium text-muted-foreground bg-muted/20 whitespace-nowrap">{formatCurrency(row.average)}</TableCell>
+                            <TableCell className="text-right font-semibold text-muted-foreground bg-muted/20 whitespace-nowrap">{formatCurrency(row.average)}</TableCell>
                         </TableRow>
                     ))}
                 </TableBody>
                 {expenseFooter && (
                     <TableFooter className="bg-muted/50 font-bold border-t-2 border-primary/20">
                         <TableRow>
-                            <TableCell>Total</TableCell>
+                            <TableCell className="text-foreground font-bold">Total</TableCell>
                             {expenseColumns.map(col => (
-                                <TableCell key={col} className="text-right text-foreground whitespace-nowrap">
+                                <TableCell key={col} className="text-right text-foreground whitespace-nowrap font-bold">
                                     {formatCurrency(expenseFooter[col] || 0)}
                                 </TableCell>
                             ))}
-                            <TableCell className="text-right text-primary whitespace-nowrap">
+                            <TableCell className="text-right text-primary whitespace-nowrap font-bold">
                                 {formatCurrency(expenseFooter.grandTotal)}
                             </TableCell>
-                            <TableCell className="text-right text-muted-foreground whitespace-nowrap">
+                            <TableCell className="text-right text-muted-foreground whitespace-nowrap font-bold">
                                 {formatCurrency(expenseFooter.averageTotal)}
                             </TableCell>
                         </TableRow>
@@ -599,19 +556,10 @@ export default function DashboardPage() {
       
       {/* 5. BOTTOM TABLES */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
-          <Card className="shadow-horizon border-none bg-card min-w-0">
-            <CardHeader className="flex flex-row items-center justify-between">
+          <Card className="shadow-sm border border-border/50 bg-card min-w-0">
+            <CardHeader>
                 <CardTitle>Balances History</CardTitle>
-                <Select value={recentFy} onValueChange={setRecentFy}>
-                    <SelectTrigger className="h-8 w-[110px] md:w-[120px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <div className="max-h-[300px] overflow-y-auto">
-                        {activeYears.slice(0, 20).map(y => (
-                            <SelectItem key={y} value={y.toString()}>FY {y}-{y.toString().slice(-2) === '99' ? '00' : (y+1).toString().slice(-2)}</SelectItem>
-                        ))}
-                        </div>
-                    </SelectContent>
-                </Select>
+                <CardDescription>Monthly revenue vs expenses</CardDescription>
             </CardHeader>
             <CardContent className="p-0 md:p-6">
                 <div className="h-[350px] overflow-y-auto">
@@ -619,20 +567,20 @@ export default function DashboardPage() {
                     <Table>
                         <TableHeader>
                             <TableRow className="hover:bg-transparent">
-                                <TableHead className="w-[100px]">Month</TableHead>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">Expense</TableHead>
-                                <TableHead className="text-right">Balance</TableHead>
+                                <TableHead className="w-[100px] text-foreground font-semibold">Month</TableHead>
+                                <TableHead className="text-right text-foreground font-semibold">Revenue</TableHead>
+                                <TableHead className="text-right text-foreground font-semibold">Expense</TableHead>
+                                <TableHead className="text-right text-foreground font-semibold">Balance</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {[...recentHistoryWithBalance].reverse().map((m: any, index: number) => (
-                                <TableRow key={`${m.month}-${m.runningBalance || 0}-${m.id || index}`}>
-                                    <TableCell className="font-medium text-foreground whitespace-nowrap">{m.month}</TableCell>
-                                    <TableCell className="text-right text-green-600 whitespace-nowrap">+{formatCurrency(m.revenue)}</TableCell>
-                                    <TableCell className="text-right text-red-600 whitespace-nowrap">-{formatCurrency(m.expense)}</TableCell>
-                                    <TableCell className={`text-right font-bold whitespace-nowrap ${m.runningBalance >= 0 ? 'text-primary' : 'text-orange-600'}`}>
-                                        {formatCurrency(m.runningBalance)}
+                            {[...historyWithBalance].reverse().map((m: any, index: number) => (
+                                <TableRow key={`${m.month}-${m.balance || 0}-${index}`}>
+                                    <TableCell className="font-semibold text-foreground whitespace-nowrap">{m.month}</TableCell>
+                                    <TableCell className="text-right text-green-600 font-semibold whitespace-nowrap">+{formatCurrency(m.revenue)}</TableCell>
+                                    <TableCell className="text-right text-red-600 font-semibold whitespace-nowrap">-{formatCurrency(m.expense)}</TableCell>
+                                    <TableCell className={`text-right font-bold whitespace-nowrap ${m.balance >= 0 ? 'text-primary' : 'text-orange-600'}`}>
+                                        {formatCurrency(m.balance)}
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -643,34 +591,35 @@ export default function DashboardPage() {
             </CardContent>
         </Card>
 
-        {/* SHARED INVOICES */}
-        <Card className="shadow-horizon border-none bg-card min-w-0">
+        {/* PENDING/SHARED INVOICES */}
+        <Card className="shadow-sm border border-border/50 bg-card min-w-0">
             <CardHeader>
                 <CardTitle>Pending Invoices</CardTitle>
-                <CardDescription>All invoices issued to clients.</CardDescription>
+                <CardDescription>All invoices awaiting client payment.</CardDescription>
             </CardHeader>
             <CardContent className="p-0 md:p-6 overflow-x-auto">
                 <Table>
                     <TableHeader>
                         <TableRow className="hover:bg-transparent">
-                            <TableHead>Invoice</TableHead>
-                            <TableHead>Client</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead className="text-foreground font-semibold">Invoice</TableHead>
+                            <TableHead className="text-foreground font-semibold">Client</TableHead>
+                            <TableHead className="text-foreground font-semibold">Status</TableHead>
+                            <TableHead className="text-right text-foreground font-semibold">Amount</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {sharedInvoices.length === 0 ? (
-                            <TableRow><TableCell colSpan={4} className="text-center py-4 text-muted-foreground">No shared invoices.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground font-semibold">No shared or overdue invoices.</TableCell></TableRow>
                         ) : sharedInvoices.map((inv: any) => (
                             <TableRow key={inv.id}>
-                                <TableCell className="font-mono text-xs text-foreground font-medium whitespace-nowrap">{inv.invoice_number}</TableCell>
-                                <TableCell className="text-muted-foreground text-sm truncate max-w-[120px]" title={inv.client?.company_name}>{inv.client?.company_name || "Unknown"}</TableCell>
+                                <TableCell className="font-mono text-xs text-foreground font-semibold whitespace-nowrap">{inv.invoice_number}</TableCell>
+                                <TableCell className="text-muted-foreground text-sm font-semibold truncate max-w-[120px]" title={inv.client?.company_name}>{inv.client?.company_name || "Unknown"}</TableCell>
                                 <TableCell>
                                     <Badge variant="outline" className={cn(
-                                        inv.status === 'SENT' && 'bg-blue-50 text-blue-700 border-blue-200',
-                                        inv.status === 'OVERDUE' && 'bg-red-50 text-red-700 border-red-200',
-                                        inv.status === 'PARTIAL' && 'bg-orange-50 text-orange-700 border-orange-200'
+                                        inv.status === 'SENT' && 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-800',
+                                        inv.status === 'OVERDUE' && 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/20 dark:text-red-400 dark:border-red-800',
+                                        inv.status === 'PARTIAL' && 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/20 dark:text-orange-400 dark:border-orange-800',
+                                        inv.status === 'SHARED' && 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/20 dark:text-indigo-400 dark:border-indigo-800'
                                     )}>{inv.status}</Badge>
                                 </TableCell>
                                 <TableCell className="text-right font-bold text-foreground whitespace-nowrap">
@@ -687,14 +636,13 @@ export default function DashboardPage() {
   );
 }
 
-// Reusable Metric Card
-function MetricCard({ title, value, icon, color, bg }: any) {
-    const formatCurrency = (val: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
+// Reusable Metric Card Component
+function MetricCard({ title, value, icon, color, bg, formatCurrency }: any) {
     return (
-        <Card className="shadow-horizon border-none bg-card hover:scale-[1.02] transition-transform duration-200 min-w-0">
+        <Card className="shadow-sm border border-border/50 bg-card hover:scale-[1.02] transition-transform duration-200 min-w-0">
             <CardContent className="p-6 flex items-center justify-between">
                 <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-muted-foreground truncate">{title}</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate">{title}</p>
                     <h3 className="text-2xl font-bold text-foreground mt-1 truncate">{formatCurrency(Number(value))}</h3>
                 </div>
                 <div className={`h-12 w-12 rounded-full flex items-center justify-center shrink-0 ${bg} ${color}`}>

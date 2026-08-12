@@ -130,9 +130,24 @@ router.get('/stats', async (req: Request, res: Response) => {
 
         const totalRevenue = invoiceRevenue + otherRevenue;
 
-        // CALCULATE AVG SALE (Only based on Invoices for business accuracy)
-        const paidCount = paidInvoices.length;
-        const avgSale = paidCount > 0 ? invoiceRevenue / paidCount : 0;
+        // CALCULATE AVG MONTHLY SALE (Based on all issued invoices except Draft/Cancelled/Void, divided by months count in range)
+        const salesInvoices = await prisma.invoice.findMany({
+            where: {
+                issue_date: { gte: fromDate, lte: toDate },
+                status: { notIn: ['DRAFT', 'Draft', 'CANCELLED', 'Cancelled', 'VOID', 'Void'] }
+            },
+            select: { grand_total: true }
+        });
+        const totalSalesAmount = salesInvoices.reduce((sum, inv) => sum + Number(inv.grand_total), 0);
+        
+        // Calculate number of calendar months in the selected range
+        const startYear = fromDate.getFullYear();
+        const startMonth = fromDate.getMonth();
+        const endYear = toDate.getFullYear();
+        const endMonth = toDate.getMonth();
+        const monthsCount = Math.max(1, (endYear - startYear) * 12 + (endMonth - startMonth) + 1);
+        
+        const avgSale = totalSalesAmount / monthsCount;
 
         const totalPending = Number(pendingInvoices._sum.grand_total || 0);
 
@@ -167,13 +182,13 @@ router.get('/stats', async (req: Request, res: Response) => {
     // 3. MONTHLY STATS (Charts)
     // ==================================================================================
     if (shouldFetch('monthlyStats')) {
-        // A. Invoices (Current Period)
-        const paidInvoices = await prisma.invoice.findMany({
+        // A. Invoices (Current Period) - Issued Invoices (except Draft/Cancelled/Void)
+        const periodInvoices = await prisma.invoice.findMany({
             where: {
-                status: { in: ['PAID', 'Paid'] },
-                payment_date: { gte: fromDate, lte: toDate }
+                status: { notIn: ['DRAFT', 'Draft', 'CANCELLED', 'Cancelled', 'VOID', 'Void'] },
+                issue_date: { gte: fromDate, lte: toDate }
             },
-            select: { payment_date: true, grand_total: true, received_amount: true }
+            select: { issue_date: true, grand_total: true }
         });
 
         // B. Other Income (Current Period)
@@ -198,10 +213,10 @@ router.get('/stats', async (req: Request, res: Response) => {
         const [prevInv, prevExp, prevInc] = await Promise.all([
             prisma.invoice.findMany({
                 where: { 
-                    status: { in: ['PAID', 'Paid'] },
-                    payment_date: { lt: fromDate } 
+                    status: { notIn: ['DRAFT', 'Draft', 'CANCELLED', 'Cancelled', 'VOID', 'Void'] },
+                    issue_date: { lt: fromDate } 
                 },
-                select: { received_amount: true, grand_total: true }
+                select: { grand_total: true }
             }),
             prisma.expense.aggregate({
                 _sum: { amount: true },
@@ -214,7 +229,7 @@ router.get('/stats', async (req: Request, res: Response) => {
             }) : { _sum: { amount: 0 } }
         ]);
 
-        const prevInvTotal = prevInv.reduce((sum, inv) => sum + (Number(inv.received_amount) || Number(inv.grand_total)), 0);
+        const prevInvTotal = prevInv.reduce((sum, inv) => sum + Number(inv.grand_total), 0);
         const prevExpTotal = Number(prevExp._sum.amount || 0);
         // @ts-ignore
         const prevIncTotal = Number(prevInc?._sum?.amount || 0);
@@ -241,12 +256,12 @@ router.get('/stats', async (req: Request, res: Response) => {
         }
 
         // Aggregate Invoices
-        paidInvoices.forEach(inv => {
-            const d = inv.payment_date || new Date(); 
+        periodInvoices.forEach(inv => {
+            const d = inv.issue_date || new Date(); 
             const month = format(d, 'MMM yyyy');
             const existing = statsMap.get(month) || { revenue: 0, expense: 0, count: 0 };
             
-            const amount = inv.received_amount ? Number(inv.received_amount) : Number(inv.grand_total);
+            const amount = Number(inv.grand_total);
 
             existing.revenue += amount;
             existing.count += 1;

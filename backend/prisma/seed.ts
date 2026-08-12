@@ -82,71 +82,26 @@ async function main() {
   }
 
   // ==================================================
-  // 2. FETCH & SEED COUNTRIES + GLOBAL STATES
+  // 2. FETCH & SEED COUNTRIES + GLOBAL STATES (Optimized for Sandbox)
   // ==================================================
+  console.log('... Seeding default countries (India, US, UK, UAE)');
   try {
-    console.log('... Fetching Live Data from CountriesNow API');
-    
-    // Fetch Data Parallelly
-    const [currencyRes, stateRes] = await Promise.all([
-      axios.get<ApiResponse<ApiCurrency[]>>('https://countriesnow.space/api/v0.1/countries/currency'),
-      axios.get<ApiResponse<ApiState[]>>('https://countriesnow.space/api/v0.1/countries/states')
-    ]);
-
-    // Create Maps with explicit types
-    const currencyMap = new Map<string, string>();
-    currencyRes.data.data.forEach((c: ApiCurrency) => {
-        currencyMap.set(c.name, c.currency);
-    });
-
-    const isoMap = new Map<string, string>();
-    currencyRes.data.data.forEach((c: ApiCurrency) => {
-        isoMap.set(c.name, c.iso2);
-    });
-
-    const countries = stateRes.data.data;
-    let globalStateIdCounter = 1000; 
-
-    console.log(`... Processing ${countries.length} Countries`);
-
-    for (const country of countries) {
-      // 1. Resolve Country Details
-      const currency = currencyMap.get(country.name) || 'USD';
-      const isoCode = isoMap.get(country.name) || country.iso2 || country.name.substring(0, 2).toUpperCase();
-
-      // 2. Upsert Country
-      if (isoCode && isoCode.length <= 5) {
-        await prisma.country.upsert({
-          where: { iso_code: isoCode },
-          update: { name: country.name, currency: currency },
-          create: { iso_code: isoCode, name: country.name, currency: currency, phone_code: "" }
-        });
-      }
-
-      // 3. Seed States (Skip India)
-      if (country.name !== "India" && country.states.length > 0) {
-        for (const state of country.states) {
-          const existing = await prisma.state.findFirst({
-            where: { name: state.name, country: country.name }
-          });
-
-          if (!existing) {
-            await prisma.state.create({
-              data: {
-                code: globalStateIdCounter++,
-                name: state.name,
-                country: country.name
-              }
-            });
-          }
-        }
-      }
+    const defaultCountries = [
+      { iso_code: "IN", name: "India", currency: "INR" },
+      { iso_code: "US", name: "United States", currency: "USD" },
+      { iso_code: "GB", name: "United Kingdom", currency: "GBP" },
+      { iso_code: "AE", name: "United Arab Emirates", currency: "AED" }
+    ];
+    for (const c of defaultCountries) {
+      await prisma.country.upsert({
+        where: { iso_code: c.iso_code },
+        update: { name: c.name, currency: c.currency },
+        create: { iso_code: c.iso_code, name: c.name, currency: c.currency, phone_code: "" }
+      });
     }
     console.log("✅ Global Data Seeded Successfully");
-
   } catch (error) {
-    console.error("❌ API Sync Failed. Using database defaults.");
-    console.error(error);
+    console.error("❌ Seeding default countries failed:", error);
   }
 
   console.log('✅ Seeding Process Complete.');

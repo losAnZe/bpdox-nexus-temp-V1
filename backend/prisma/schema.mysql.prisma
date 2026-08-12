@@ -5,7 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -14,8 +14,8 @@ datasource db {
 // --------------------------------------
 
 model SystemSetting {
-  key         String  @id
-  value       String? 
+  key         String  @id @db.VarChar(50) // e.g., "COMPANY_PROFILE", "SMTP_CONFIG"
+  value       String? @db.Text            // Simple value store
   json_value  Json?                       // Flexible config store (Logos, Signatures)
   is_locked   Boolean @default(false)     // Prevent accidental deletion of core settings
 }
@@ -36,6 +36,8 @@ model User {
   activities         ActivityLog[]
 
   created_at         DateTime @default(now())
+
+  
 }
 
 model ActivityLog {
@@ -61,7 +63,7 @@ model Notification {
   user        User     @relation(fields: [user_id], references: [id])
   
   title       String
-  message     String?  
+  message     String?  @db.Text
   type        String   @default("INFO") // INFO, SUCCESS, WARNING, ERROR
   is_read     Boolean  @default(false)
   link        String?  // Optional: URL to redirect (e.g. /invoices/5)
@@ -113,7 +115,7 @@ model BankAccount {
   ifsc_code           String?  // India
   iban                String?  // Europe
   sort_code           String?  // UK
-  branch_address      String?  
+  branch_address      String?  @db.Text
   upi_id              String?  // India UPI
   payment_method      String? // e.g. "Wire Transfer", "ACH", "Zelle"
   
@@ -145,18 +147,18 @@ model Invoice {
   due_date        DateTime?
   payment_date    DateTime?
   currency        String   @default("INR")
-  received_amount Decimal? 
+  received_amount Decimal? @db.Decimal(15, 2)
   
   // JSON Data Blobs for Flexibility
   line_items      Json     // Array of items { desc, qty, rate, hsn }
   tax_summary     Json     // Snapshot of tax calculations
   
   // Financials
-  subtotal        Decimal  
-  grand_total     Decimal  
+  subtotal        Decimal  @db.Decimal(15, 2)
+  grand_total     Decimal  @db.Decimal(15, 2)
   
   // Features
-  remarks         String?  
+  remarks         String?  @db.Text
   is_manual_entry Boolean  @default(false) // Allows backdating/custom numbers
  
   created_at      DateTime @default(now())
@@ -181,12 +183,12 @@ model Quotation {
   
   // Quote Specifics
   line_items        Json     
-  services_offered  String?   
-  contract_terms    String?   
-  remarks           String?   
+  services_offered  String?  @db.Text 
+  contract_terms    String?  @db.Text 
+  remarks           String?  @db.Text 
   
-  subtotal          Decimal  
-  grand_total       Decimal  
+  subtotal          Decimal  @db.Decimal(15, 2)
+  grand_total       Decimal  @db.Decimal(15, 2)
   currency          String   @default("INR")
   
   is_manual_entry   Boolean  @default(false)
@@ -200,7 +202,7 @@ model Quotation {
 model Expense {
   id          Int      @id @default(autoincrement())
   category    String
-  amount      Decimal  
+  amount      Decimal  @db.Decimal(15, 2)
   date        DateTime
   description String?
   created_at  DateTime @default(now())
@@ -211,9 +213,9 @@ model Expense {
 model OtherIncome {
   id          Int      @id @default(autoincrement())
   category    String   // e.g., "Bank Interest", "Asset Sale"
-  amount      Decimal  
+  amount      Decimal  @db.Decimal(15, 2)
   date        DateTime
-  description String?  
+  description String?  @db.Text
   
   created_at  DateTime @default(now())
 
@@ -251,10 +253,10 @@ model State {
 }
 
 model Country {
-  iso_code    String  @id 
-  name        String  
-  currency    String? 
-  phone_code  String? 
+  iso_code    String  @id @db.VarChar(5)
+  name        String  @db.VarChar(100)
+  currency    String? @db.VarChar(50)
+  phone_code  String? @db.VarChar(10)
 
   @@map("Country")
 }
@@ -275,11 +277,11 @@ model ClientAsset {
   purchase_date   DateTime
   activation_date DateTime
   expiry_date     DateTime
-  renewal_cost    Decimal  
+  renewal_cost    Decimal  @db.Decimal(15, 2)
   billing_cycle   String   // e.g. "Monthly", "Yearly"
   status          String   @default("ACTIVE") // ACTIVE, EXPIRED, EXPIRING, INACTIVE
   alert_email     String?  // Optional email address to receive expiry alerts for this asset
-  notes           String?  
+  notes           String?  @db.Text
   attachments     Json?    // Array of file path strings
   reminders_sent  Json?    // Array of reminder days sent: [30, 15, 7, 3, 1, 0]
   

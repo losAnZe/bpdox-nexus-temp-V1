@@ -2,6 +2,21 @@ import fs from 'fs';
 import path from 'path';
 import { format } from 'date-fns';
 
+// --- Helper: Load Red Hat Display font as base64 data URI ---
+let _fontBase64Cache: string | null = null;
+const getRedHatDisplayBase64 = (): string => {
+  if (_fontBase64Cache) return _fontBase64Cache;
+  try {
+    const fontPath = path.resolve(__dirname, '../../fonts/RedHatDisplay-Variable.ttf');
+    const fontBuffer = fs.readFileSync(fontPath);
+    _fontBase64Cache = fontBuffer.toString('base64');
+    return _fontBase64Cache;
+  } catch (e) {
+    console.warn('[InvoiceTemplate] Could not load Red Hat Display font file:', e);
+    return '';
+  }
+};
+
 // --- Helper: Convert Number to Words (Indian Numbering System) ---
 const numberToWords = (n: number): string => {
   const units = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
@@ -139,11 +154,16 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
 <head>
 <meta charset="UTF-8">
 <title>Invoice ${invoice.invoice_number}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;500;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
 <style>
+    @font-face {
+        font-family: 'Red Hat Display';
+        src: url('data:font/truetype;base64,${getRedHatDisplayBase64()}') format('truetype');
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: block;
+    }
+
     @page { margin: 0; size: A4; }
     :root {
         --accent: #3A6EF3; /* Horizon Blue */
@@ -154,7 +174,7 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
     * { box-sizing: border-box; }
 
     body {
-        font-family: 'DM Sans', sans-serif; /* Changed from Calibri */
+        font-family: 'Red Hat Display', sans-serif;
         font-size: 12pt;
         color: var(--text);
         margin: 0;
@@ -175,7 +195,7 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
         align-items: flex-start;
         gap: 25px;
         margin-bottom: 28px;
-        font-family: 'Inter', sans-serif; /* Changed from Helvetica */
+        font-family: 'Red Hat Display', sans-serif;
     }
 
     .company-name {
@@ -183,7 +203,7 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
         font-weight: 700;
         margin-bottom: 6px;
         color: #000;
-        font-family: 'Inter', sans-serif; /* Changed from Helvetica */
+        font-family: 'Red Hat Display', sans-serif;
     }
 
     .company-name-divider {
@@ -221,7 +241,7 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
     .invoice-meta-label { 
         font-weight: 600; 
         color: #000; 
-        font-family: 'Inter', sans-serif; 
+        font-family: 'Red Hat Display', sans-serif; 
     }
 
     /* CLIENT CARD */
@@ -240,7 +260,7 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
         margin-bottom: 7px;
         text-transform: uppercase;
         color: #000;
-        font-family: 'Inter', sans-serif;
+        font-family: 'Red Hat Display', sans-serif;
     }
 
     /* PRODUCT TABLE */
@@ -260,7 +280,7 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
         font-weight: 600;
         text-align: center;
         overflow: hidden;
-        font-family: 'Inter', sans-serif;
+        font-family: 'Red Hat Display', sans-serif;
     }
 
     #product-table tbody td {
@@ -319,7 +339,7 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
         font-weight: bold; 
         color: #000; 
         margin-bottom: 5px; 
-        font-family: 'Inter', sans-serif;
+        font-family: 'Red Hat Display', sans-serif;
     }
 
     /* TOTALS BOX */
@@ -360,7 +380,7 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
         font-size: 12px !important;
         color: #000;
         padding-top: 8px !important;
-        font-family: 'Inter', sans-serif;
+        font-family: 'Red Hat Display', sans-serif;
     }
     /* SIGNATURE SECTION */
 

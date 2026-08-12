@@ -26,7 +26,10 @@ import profileRoutes from './routes/profileRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import activityRoutes from './routes/activityRoutes';
 import incomeRoutes from './routes/incomeRoutes';
+import assetRoutes from './routes/assetRoutes';
+import updateRoutes from './routes/updateRoutes';
 import { ActivityService } from './services/ActivityService';
+import { ReminderService } from './services/ReminderService';
 
 import { authenticateToken } from './middleware/authMiddleware';
 
@@ -89,6 +92,8 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/income', incomeRoutes);
+app.use('/api/assets', assetRoutes);
+app.use('/api/update', updateRoutes);
 
 // 5. Start Server
 app.listen(PORT, () => {
@@ -96,9 +101,21 @@ app.listen(PORT, () => {
 
   if (process.env.DATABASE_URL) {
       ActivityService.pruneLogs(7);
+
+      // Run asset expiry checks on server startup
+      setTimeout(() => {
+        ReminderService.checkExpiryAndSendReminders().catch(console.error);
+      }, 5000);
+
       setInterval(() => {
         console.log("[Cron] Running daily log rotation...");
         ActivityService.pruneLogs(7);
+      }, 86400000);
+
+      // Run asset expiry checks every 24 hours
+      setInterval(() => {
+        console.log("[Cron] Running daily asset expiry checks...");
+        ReminderService.checkExpiryAndSendReminders().catch(console.error);
       }, 86400000);
   } else {
       console.log("[InvoiceCore] System awaiting setup. Go to /setup to initialize.");

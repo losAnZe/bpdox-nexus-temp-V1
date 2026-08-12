@@ -329,7 +329,7 @@ export default function ExpensesPage() {
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold text-foreground">
-                    {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totalExpense)}
+                    {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalExpense)}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 capitalize">
                    {dateRange?.from ? 'Custom Range' : (periodFilter === 'all' ? 'All Time' : periodFilter)}

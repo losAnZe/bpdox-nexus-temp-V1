@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -24,8 +24,11 @@ export class BackupService {
         // Users (Careful with this, but needed for full restore)
         const users = await prisma.user.findMany();
 
+        // Client Assets
+        const clientAssets = await prisma.clientAsset.findMany();
+
         const backupData = {
-          version: "2.0", // Bumped version for the new schema
+          version: "2.1", // Bumped version for client assets
           timestamp: new Date().toISOString(),
           data: {
             clients,
@@ -36,7 +39,8 @@ export class BackupService {
             settings,
             invoiceSequences,
             quotationSequences,
-            users
+            users,
+            clientAssets
           }
         };
 
@@ -164,6 +168,48 @@ export class BackupService {
             where: { fiscal_year: seq.fiscal_year },
             update: { last_count: seq.last_count },
             create: { fiscal_year: seq.fiscal_year, last_count: seq.last_count }
+          });
+        }
+      }
+
+      // F. Client Assets (Backward compatible)
+      if (parsed.data.clientAssets) {
+        for (const a of parsed.data.clientAssets) {
+          await tx.clientAsset.upsert({
+            where: { id: a.id },
+            update: {
+              client_id: a.client_id,
+              asset_type: a.asset_type,
+              asset_name: a.asset_name,
+              provider: a.provider,
+              plan: a.plan,
+              purchase_date: new Date(a.purchase_date),
+              activation_date: new Date(a.activation_date),
+              expiry_date: new Date(a.expiry_date),
+              renewal_cost: new Prisma.Decimal(a.renewal_cost),
+              billing_cycle: a.billing_cycle,
+              status: a.status,
+              notes: a.notes,
+              attachments: a.attachments,
+              reminders_sent: a.reminders_sent
+            },
+            create: {
+              id: a.id,
+              client_id: a.client_id,
+              asset_type: a.asset_type,
+              asset_name: a.asset_name,
+              provider: a.provider,
+              plan: a.plan,
+              purchase_date: new Date(a.purchase_date),
+              activation_date: new Date(a.activation_date),
+              expiry_date: new Date(a.expiry_date),
+              renewal_cost: new Prisma.Decimal(a.renewal_cost),
+              billing_cycle: a.billing_cycle,
+              status: a.status,
+              notes: a.notes,
+              attachments: a.attachments,
+              reminders_sent: a.reminders_sent
+            }
           });
         }
       }

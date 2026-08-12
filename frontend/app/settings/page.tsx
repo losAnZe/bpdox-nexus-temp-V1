@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import api from "@/lib/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Wallet, Upload, Mail, Users, FileText, Shield, Code } from "lucide-react";
+import { Building2, Wallet, Upload, Mail, Users, FileText, Shield, Code, RefreshCw } from "lucide-react";
 import { GeneralSettings } from '@/components/settings/GeneralSettings';
 import { BrandingSettings } from '@/components/settings/BrandingSettings';
 import { DocumentSettings } from '@/components/settings/DocumentSettings';
@@ -11,6 +11,7 @@ import { BankSettings } from '@/components/settings/BankSettings';
 import { EmailSettings } from '@/components/settings/EmailSettings';
 import { TeamSettings } from '@/components/settings/TeamSettings';
 import { BackupSettings } from '@/components/settings/BackupSettings';
+import { UpdateSettings } from '@/components/settings/UpdateSettings';
 import { useRole } from "@/hooks/use-role";
 import { useToast } from "@/components/ui/toast-context";
 
@@ -99,8 +100,9 @@ export default function SettingsPage() {
             <TabItem value="bank" icon={<Wallet className="w-4 h-4"/>} label="Banking" />
             <TabItem value="email" icon={<Mail className="w-4 h-4"/>} label="Email" />
             <TabItem value="team" icon={<Users className="w-4 h-4"/>} label="Team" />
-            {/* Backup is strictly hidden for non-Owners */}
+            {/* Backup & System Updates are strictly hidden for non-Owners */}
             {isSudo && <TabItem value="backup" icon={<Shield className="w-4 h-4"/>} label="Data" />}
+            {isSudo && <TabItem value="updates" icon={<RefreshCw className="w-4 h-4"/>} label="System Updates" />}
           </TabsList>
         </div>
 
@@ -133,6 +135,12 @@ export default function SettingsPage() {
         {isSudo && (
           <TabsContent value="backup">
             <BackupSettings />
+          </TabsContent>
+        )}
+
+        {isSudo && (
+          <TabsContent value="updates">
+            <UpdateSettings />
           </TabsContent>
         )}
 

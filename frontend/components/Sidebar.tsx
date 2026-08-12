@@ -8,7 +8,7 @@ import { useConfigurator } from "@/hooks/use-configurator";
 import { useRole } from "@/hooks/use-role";
 import { 
   LayoutDashboard, FileText, Users, Settings, Wallet, 
-  ChevronLeft, ChevronRight, Search, BookOpen, LogOut, User, MoreVertical, Activity 
+  ChevronLeft, ChevronRight, Search, BookOpen, LogOut, User, MoreVertical, Activity, Package 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,12 +65,13 @@ export function Sidebar({ className, hideLogo = false, forceExpand = false }: Si
   // END: Dynamic Software Name Logic
   
   const isMini = forceExpand ? false : sidebarType === 'mini';
-
+  
   const navItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard, visible: true },
     { href: "/invoices", label: "Invoices", icon: FileText, visible: true },
     { href: "/quotations", label: "Quotations", icon: FileText, visible: true },
     { href: "/clients", label: "Clients", icon: Users, visible: true },
+    { href: "/assets", label: "Client Assets", icon: Package, visible: true },
     { href: "/expenses", label: "Expenses", icon: Wallet, visible: true },
     
     // Admin & Sudo Only

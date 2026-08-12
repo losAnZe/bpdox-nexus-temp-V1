@@ -18,8 +18,11 @@ export const generateLedgerHTML = (transactions: any[], dateRange: string, owner
     <!DOCTYPE html>
     <html>
     <head>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
       <style>
-        body { font-family: 'Helvetica', sans-serif; padding: 40px; color: #333; }
+        body { font-family: 'Inter', 'Helvetica', sans-serif; padding: 40px; color: #333; }
         .header { display: flex; justify-content: space-between; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
         .title { font-size: 24px; font-weight: bold; color: #4318FF; }
         .subtitle { font-size: 14px; color: #666; margin-top: 5px; }

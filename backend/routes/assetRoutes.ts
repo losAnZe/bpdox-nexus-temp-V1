@@ -1,0 +1,315 @@
+import { Router, Request, Response } from 'express';
+import { PrismaClient, Prisma } from '@prisma/client';
+import { AuthRequest, authorize } from '../middleware/authMiddleware';
+import { ActivityService } from '../services/ActivityService';
+import { ReminderService } from '../services/ReminderService';
+
+const router = Router();
+const prisma = new PrismaClient();
+
+// ==========================================
+// 1. GET ALL ASSETS (with Search & Filters)
+// ==========================================
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const { client_id, asset_type, status, search } = req.query;
+
+    const where: Prisma.ClientAssetWhereInput = {};
+
+    // Filter by Client
+    if (client_id) {
+      where.client_id = Number(client_id);
+    }
+
+    // Filter by Asset Type
+    if (asset_type && asset_type !== 'ALL') {
+      where.asset_type = asset_type as string;
+    }
+
+    // Filter by Status
+    if (status && status !== 'ALL') {
+      where.status = status as string;
+    }
+
+    // Search Term (Asset Name, Provider, Client Company Name)
+    if (search) {
+      const searchStr = search as string;
+      where.OR = [
+        { asset_name: { contains: searchStr } },
+        { provider: { contains: searchStr } },
+        {
+          client: {
+            company_name: { contains: searchStr }
+          }
+        }
+      ];
+    }
+
+    const assets = await prisma.clientAsset.findMany({
+      where,
+      include: {
+        client: true
+      },
+      orderBy: {
+        expiry_date: 'asc'
+      }
+    });
+
+    res.json(assets);
+  } catch (error) {
+    console.error("Fetch Assets Error:", error);
+    res.status(500).json({ error: "Failed to fetch assets" });
+  }
+});
+
+// ==========================================
+// 2. GET SINGLE ASSET
+// ==========================================
+router.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+
+    const asset = await prisma.clientAsset.findUnique({
+      where: { id },
+      include: {
+        client: true
+      }
+    });
+
+    if (!asset) return res.status(404).json({ error: "Asset not found" });
+
+    res.json(asset);
+  } catch (error) {
+    console.error("Fetch Single Asset Error:", error);
+    res.status(500).json({ error: "Failed to fetch asset" });
+  }
+});
+
+// ==========================================
+// 3. CREATE ASSET
+// ==========================================
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const {
+      client_id,
+      asset_type,
+      asset_name,
+      provider,
+      plan,
+      purchase_date,
+      activation_date,
+      expiry_date,
+      renewal_cost,
+      billing_cycle,
+      status,
+      alert_email,
+      notes,
+      attachments
+    } = req.body;
+
+    if (!client_id || !asset_type || !asset_name || !expiry_date || renewal_cost === undefined) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Auto-calculate status if not set to INACTIVE
+    let finalStatus = status || "ACTIVE";
+    if (finalStatus !== 'INACTIVE') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const expiry = new Date(expiry_date);
+      expiry.setHours(0, 0, 0, 0);
+      const diffMs = expiry.getTime() - today.getTime();
+      const daysRemaining = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      if (daysRemaining <= 0) {
+        finalStatus = 'EXPIRED';
+      } else if (daysRemaining <= 30) {
+        finalStatus = 'EXPIRING';
+      } else {
+        finalStatus = 'ACTIVE';
+      }
+    }
+
+    const newAsset = await prisma.clientAsset.create({
+      data: {
+        client_id: Number(client_id),
+        asset_type,
+        asset_name,
+        provider: provider || "",
+        plan: plan || "",
+        purchase_date: new Date(purchase_date),
+        activation_date: new Date(activation_date),
+        expiry_date: new Date(expiry_date),
+        renewal_cost: new Prisma.Decimal(renewal_cost),
+        billing_cycle: billing_cycle || "Yearly",
+        status: finalStatus,
+        alert_email: alert_email ? String(alert_email).trim() : null,
+        notes: notes || "",
+        attachments: attachments || [],
+        reminders_sent: []
+      }
+    });
+
+    // Log Activity
+    const authReq = req as AuthRequest;
+    if (authReq.user) {
+      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+      await ActivityService.log(
+        authReq.user.id,
+        "CREATE_ASSET",
+        `Created Asset "${asset_name}" (${asset_type}) for client ID ${client_id}`,
+        "CLIENT_ASSET",
+        newAsset.id.toString(),
+        ip as string
+      );
+    }
+
+    // Instantly check & send alerts if milestone or expiry applies
+    ReminderService.checkSingleAssetReminder(newAsset.id).catch(err => {
+      console.error("[assetRoutes] Error in instant reminder check:", err);
+    });
+
+    res.status(201).json(newAsset);
+  } catch (error) {
+    console.error("Create Asset Error:", error);
+    res.status(500).json({ error: "Failed to create asset" });
+  }
+});
+
+// ==========================================
+// 4. UPDATE ASSET
+// ==========================================
+router.put('/:id', async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+
+    const {
+      client_id,
+      asset_type,
+      asset_name,
+      provider,
+      plan,
+      purchase_date,
+      activation_date,
+      expiry_date,
+      renewal_cost,
+      billing_cycle,
+      status,
+      alert_email,
+      notes,
+      attachments
+    } = req.body;
+
+    // Reset reminders if expiry date is changed
+    const existing = await prisma.clientAsset.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: "Asset not found" });
+
+    let updatedReminders = existing.reminders_sent;
+    const oldExpiry = new Date(existing.expiry_date).getTime();
+    const newExpiry = expiry_date ? new Date(expiry_date).getTime() : oldExpiry;
+    
+    if (oldExpiry !== newExpiry) {
+      // Clear sent reminders if the expiry date is extended/changed
+      updatedReminders = [];
+    }
+
+    // Auto-calculate status if not set to INACTIVE
+    let finalStatus = status !== undefined ? status : existing.status;
+    if (finalStatus !== 'INACTIVE') {
+      const targetExpiry = expiry_date ? new Date(expiry_date) : new Date(existing.expiry_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      targetExpiry.setHours(0, 0, 0, 0);
+      const diffMs = targetExpiry.getTime() - today.getTime();
+      const daysRemaining = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      if (daysRemaining <= 0) {
+        finalStatus = 'EXPIRED';
+      } else if (daysRemaining <= 30) {
+        finalStatus = 'EXPIRING';
+      } else {
+        finalStatus = 'ACTIVE';
+      }
+    }
+
+    const updated = await prisma.clientAsset.update({
+      where: { id },
+      data: {
+        client_id: client_id ? Number(client_id) : undefined,
+        asset_type,
+        asset_name,
+        provider,
+        plan,
+        purchase_date: purchase_date ? new Date(purchase_date) : undefined,
+        activation_date: activation_date ? new Date(activation_date) : undefined,
+        expiry_date: expiry_date ? new Date(expiry_date) : undefined,
+        renewal_cost: renewal_cost !== undefined ? new Prisma.Decimal(renewal_cost) : undefined,
+        billing_cycle,
+        status: finalStatus,
+        alert_email: alert_email !== undefined ? (alert_email ? String(alert_email).trim() : null) : undefined,
+        notes,
+        attachments,
+        reminders_sent: updatedReminders as Prisma.InputJsonValue
+      }
+    });
+
+    // Log Activity
+    const authReq = req as AuthRequest;
+    if (authReq.user) {
+      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+      await ActivityService.log(
+        authReq.user.id,
+        "UPDATE_ASSET",
+        `Updated Asset "${updated.asset_name}" (${updated.asset_type})`,
+        "CLIENT_ASSET",
+        id.toString(),
+        ip as string
+      );
+    }
+
+    // Instantly check & send alerts if milestone or expiry applies
+    ReminderService.checkSingleAssetReminder(updated.id).catch(err => {
+      console.error("[assetRoutes] Error in instant reminder check:", err);
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error("Update Asset Error:", error);
+    res.status(500).json({ error: "Failed to update asset" });
+  }
+});
+
+// ==========================================
+// 5. DELETE ASSET
+// ==========================================
+router.delete('/:id', authorize(['SUDO_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+
+    const deleted = await prisma.clientAsset.delete({
+      where: { id }
+    });
+
+    // Log Activity
+    const authReq = req as AuthRequest;
+    if (authReq.user) {
+      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+      await ActivityService.log(
+        authReq.user.id,
+        "DELETE_ASSET",
+        `Deleted Asset "${deleted.asset_name}" (${deleted.asset_type})`,
+        "CLIENT_ASSET",
+        id.toString(),
+        ip as string
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Delete Asset Error:", error);
+    res.status(500).json({ error: "Failed to delete asset" });
+  }
+});
+
+export default router;
