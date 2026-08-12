@@ -1,0 +1,239 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* --- HORIZON LIGHT THEME --- */
+    --background: 210 33% 96%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 251 100% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 8% 46%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 251 100% 55%;
+    --radius: 1rem;
+  }
+
+  /* --- HORIZON DARK (Default Navy) --- */
+  .dark {
+    --background: 225 50% 8%;   /* #060B1E */
+    --foreground: 0 0% 100%;
+    --card: 227 60% 17%;        /* #111C44 */
+    --card-foreground: 0 0% 100%;
+    --popover: 227 60% 17%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 251 100% 65%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 226 58% 25%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 226 58% 25%;
+    --muted-foreground: 223 25% 80%;
+    --accent: 226 58% 25%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 226 45% 30%;
+    --input: 226 45% 30%;
+    --ring: 251 100% 65%;
+  }
+
+  /* --- MIDNIGHT BLACK THEME OVERRIDES --- */
+html.dark[data-style='midnight'] {
+    --background: 0 0% 0%;       /* Pure Black */
+    --foreground: 0 0% 100%;     /* Pure White */
+    
+    /* Card Base */
+    --card: 0 0% 3%;             /* Slightly lighter than pure black for separation */
+    --card-foreground: 0 0% 100%;
+    
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 100%;
+    
+    /* CRITICAL: Primary = White, Text = Black */
+    --primary: 0 0% 100%;        
+    --primary-foreground: 0 0% 0%; 
+    
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 100%;
+    
+    /* Lighter muted for better readability on black */
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 70%; 
+    
+    --accent: 0 0% 12%;
+    --accent-foreground: 0 0% 100%;
+    
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 0 0% 20%;          
+    --input: 0 0% 20%;
+    --ring: 0 0% 80%; /* Softer ring */
+}
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground transition-colors duration-500 ease-in-out relative;
+    background-color: hsl(var(--background)); 
+    overflow-x: hidden;
+  }
+
+  /* Orbs Code (Hidden in Midnight) */
+  body::before,
+  body::after {
+    content: '';
+    position: fixed;
+    width: 40vw;
+    height: 40vw;
+    border-radius: 50%;
+    filter: blur(120px);
+    z-index: -1;
+    animation: float 20s infinite alternate ease-in-out;
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  body::before {
+    top: -10%;
+    left: -10%;
+    background: radial-gradient(circle, hsla(var(--primary)), transparent 70%);
+  }
+  body::after {
+    bottom: -10%;
+    right: -10%;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.3), transparent 70%);
+    animation-delay: -10s;
+  }
+
+  .dark body::before { opacity: 0.2; }
+  .dark body::after { opacity: 0.15; }
+
+  /* HIDE Orbs in Midnight Mode */
+  .dark[data-style='midnight'] body::before,
+  .dark[data-style='midnight'] body::after {
+      display: none !important;
+  }
+
+  /* --- GLASSMORPHISM OVERRIDES --- */
+  .dark[data-style='midnight'] .bg-card,
+  .dark[data-style='midnight'] [data-slot="card"],
+  .dark[data-style='midnight'] aside {
+      background-color: rgba(0, 0, 0, 0.4) !important;
+      backdrop-filter: blur(20px) saturate(0%) !important;
+      border: 1px solid rgba(255, 255, 255, 0.15) !important;
+      box-shadow: 0 4px 20px rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .dark[data-style='midnight'] aside {
+      background-color: rgba(0, 0, 0, 0.6) !important;
+      border-right: 1px solid rgba(255, 255, 255, 0.15) !important;
+  }
+  
+  .dark[data-style='midnight'] header {
+      background-color: rgba(0, 0, 0, 0.6) !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+  }
+}
+
+@layer components {
+  /* FIX: Use standard CSS for background to avoid circular @apply reference */
+  .bg-popover {
+    background-color: hsl(var(--popover) / 0.95);
+    @apply backdrop-blur-md border border-border shadow-2xl;
+  }
+  
+  /* Duplicate wrapper style just to be safe */
+  [data-radix-popper-content-wrapper] {
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .rdp {
+    @apply bg-card rounded-xl shadow-xl p-4 border border-border m-0;
+  }
+  
+  .rdp-day_selected {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground;
+  }
+  
+  .config-option-active {
+    @apply ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* FIX: Use standard foreground variable so it adapts to black/white */
+  .text-popover-foreground {
+    @apply text-foreground;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/60 dark:bg-card/60 backdrop-blur-xl border border-white/40 dark:border-white/5 shadow-lg;
+  }
+  
+  .solid-card {
+    @apply bg-card border border-border shadow-sm;
+  }
+
+  .shadow-horizon {
+    box-shadow: 0px 18px 40px rgba(112, 144, 176, 0.12);
+  }
+  .dark .shadow-horizon {
+    box-shadow: none; 
+  }
+
+  @keyframes float {
+    0% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(5%, 10%) scale(1.1); }
+    100% { transform: translate(-5%, 5%) scale(1); }
+  }
+  
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .animate-spin-slow {
+    animation: spin-slow 8s linear infinite;
+  }
+
+  .animate-float {
+    animation-name: float;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent; 
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 dark:bg-slate-700 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400 dark:bg-slate-600;
+  }
+  
+}
