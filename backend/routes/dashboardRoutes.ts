@@ -112,12 +112,11 @@ router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, 
             otherRevenue = Number(otherIncomeAgg._sum.amount || 0);
         }
 
-        // C. FETCH PENDING
+        // C. FETCH PENDING (All-time live unpaid invoices regardless of date filter)
         const pendingInvoices = await prisma.invoice.aggregate({
             _sum: { grand_total: true },
             where: {
-                status: { in: ['SENT', 'Sent', 'OVERDUE', 'Overdue', 'PARTIAL', 'Partial'] },
-                issue_date: { gte: fromDate, lte: toDate }
+                status: { in: ['SENT', 'Sent', 'OVERDUE', 'Overdue', 'PARTIAL', 'Partial'] }
             }
         });
 
@@ -129,24 +128,42 @@ router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, 
 
         const totalRevenue = invoiceRevenue + otherRevenue;
 
-        // CALCULATE AVG MONTHLY SALE (Based on all issued invoices except Draft/Cancelled/Void, divided by months count in range)
+        // CALCULATE AVG MONTHLY SALE (Only divide by months that had sales or expenses activity)
         const salesInvoices = await prisma.invoice.findMany({
             where: {
                 issue_date: { gte: fromDate, lte: toDate },
                 status: { notIn: ['DRAFT', 'Draft', 'CANCELLED', 'Cancelled', 'VOID', 'Void'] }
             },
-            select: { grand_total: true }
+            select: { grand_total: true, received_amount: true, issue_date: true }
         });
-        const totalSalesAmount = salesInvoices.reduce((sum, inv) => sum + Number(inv.grand_total), 0);
+
+        const periodExpenses = await prisma.expense.findMany({
+            where: {
+                date: { gte: fromDate, lte: toDate }
+            },
+            select: { date: true }
+        });
+
+        const totalSalesAmount = salesInvoices.reduce((sum, inv) => {
+            const actual = inv.received_amount ? Number(inv.received_amount) : Number(inv.grand_total);
+            return sum + actual;
+        }, 0);
         
-        // Calculate number of calendar months in the selected range
-        const startYear = fromDate.getFullYear();
-        const startMonth = fromDate.getMonth();
-        const endYear = toDate.getFullYear();
-        const endMonth = toDate.getMonth();
-        const monthsCount = Math.max(1, (endYear - startYear) * 12 + (endMonth - startMonth) + 1);
-        
-        const avgSale = totalSalesAmount / monthsCount;
+        // Count distinct active months (YYYY-MM) with sales or expenses
+        const activeMonthSet = new Set<string>();
+        salesInvoices.forEach(inv => {
+            if (inv.issue_date) {
+                activeMonthSet.add(format(new Date(inv.issue_date), 'yyyy-MM'));
+            }
+        });
+        periodExpenses.forEach(exp => {
+            if (exp.date) {
+                activeMonthSet.add(format(new Date(exp.date), 'yyyy-MM'));
+            }
+        });
+
+        const activeMonthsCount = activeMonthSet.size > 0 ? activeMonthSet.size : 1;
+        const avgSale = totalSalesAmount / activeMonthsCount;
 
         const totalPending = Number(pendingInvoices._sum.grand_total || 0);
 
@@ -187,7 +204,7 @@ router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, 
                 status: { notIn: ['DRAFT', 'Draft', 'CANCELLED', 'Cancelled', 'VOID', 'Void'] },
                 issue_date: { gte: fromDate, lte: toDate }
             },
-            select: { issue_date: true, grand_total: true }
+            select: { issue_date: true, payment_date: true, grand_total: true, received_amount: true }
         });
 
         // B. Other Income (Current Period)
@@ -207,15 +224,15 @@ router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, 
             select: { date: true, amount: true }
         });
 
-        // --- D. CALCULATE OPENING BALANCE (Previous Years/Periods) ---
-        // Fetch sums of everything BEFORE the fromDate
+        // --- D. CALCULATE OPENING BALANCE (Historical Cumulative Net) ---
+        // Fetch paid revenue and expenses prior to fromDate
         const [prevInv, prevExp, prevInc] = await Promise.all([
             prisma.invoice.findMany({
                 where: { 
-                    status: { notIn: ['DRAFT', 'Draft', 'CANCELLED', 'Cancelled', 'VOID', 'Void'] },
-                    issue_date: { lt: fromDate } 
+                    status: { in: ['PAID', 'Paid'] },
+                    payment_date: { lt: fromDate } 
                 },
-                select: { grand_total: true }
+                select: { grand_total: true, received_amount: true }
             }),
             prisma.expense.aggregate({
                 _sum: { amount: true },
@@ -228,7 +245,10 @@ router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, 
             }) : { _sum: { amount: 0 } }
         ]);
 
-        const prevInvTotal = prevInv.reduce((sum, inv) => sum + Number(inv.grand_total), 0);
+        const prevInvTotal = prevInv.reduce((sum, inv) => {
+            const actual = inv.received_amount ? Number(inv.received_amount) : Number(inv.grand_total);
+            return sum + actual;
+        }, 0);
         const prevExpTotal = Number(prevExp._sum.amount || 0);
         // @ts-ignore
         const prevIncTotal = Number(prevInc?._sum?.amount || 0);
@@ -256,11 +276,11 @@ router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, 
 
         // Aggregate Invoices
         periodInvoices.forEach(inv => {
-            const d = inv.issue_date || new Date(); 
+            const d = inv.payment_date || inv.issue_date || new Date(); 
             const month = format(d, 'MMM yyyy');
             const existing = statsMap.get(month) || { revenue: 0, expense: 0, count: 0 };
             
-            const amount = Number(inv.grand_total);
+            const amount = inv.received_amount ? Number(inv.received_amount) : Number(inv.grand_total);
 
             existing.revenue += amount;
             existing.count += 1;

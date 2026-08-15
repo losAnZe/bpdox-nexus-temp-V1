@@ -152,11 +152,22 @@ export default function DashboardPage() {
   const [isYearDropdownOpen, setIsYearDropdownOpen] = useState(false);
   const [yearlyData, setYearlyData] = useState<any[]>([]);
 
-  // Unified Dashboard Data (replaces separate fetches)
+  // Filtered Dashboard Data (updates on filter change)
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [expenseTable, setExpenseTable] = useState<any[]>([]);
   const [expenseColumns, setExpenseColumns] = useState<string[]>([]);
+  
+  // ALL-TIME data — never affected by date filter (Balance History + Pending Invoices)
+  const [allTimeMonthlyData, setAllTimeMonthlyData] = useState<any[]>([]);
   const [sharedInvoices, setSharedInvoices] = useState<any[]>([]);
+
+  // Dedicated Card Filters for Balances History (same Filter By presets & custom date range as Dashboard)
+  const [historyFilter, setHistoryFilter] = useState<string>("all");
+  const [historyCustomRange, setHistoryCustomRange] = useState<DateRange | undefined>();
+
+  // Dedicated Card Filters for Pending Invoices (same Filter By presets & custom date range as Dashboard)
+  const [pendingFilter, setPendingFilter] = useState<string>("all");
+  const [pendingCustomRange, setPendingCustomRange] = useState<DateRange | undefined>();
   
   const [loading, setLoading] = useState(true);
   const [loadingStats, setLoadingStats] = useState(false);
@@ -194,9 +205,15 @@ export default function DashboardPage() {
                 sections: 'summary,availableYears,monthlyStats,expenseTable'
             });
 
-            const [statsRes, sharedRes] = await Promise.all([
+            // All-time params for Balance History (no date filter)
+            const allTimeParams = new URLSearchParams({
+                sections: 'monthlyStats'
+            });
+
+            const [statsRes, sharedRes, allTimeRes] = await Promise.all([
                 api.get(`/dashboard/stats?${params}`),
-                api.get('/invoices/shared')
+                api.get('/invoices/shared'),
+                api.get(`/dashboard/stats?${allTimeParams}`)
             ]);
             
             setSummary(statsRes.data.summary);
@@ -204,6 +221,8 @@ export default function DashboardPage() {
             setExpenseTable(statsRes.data.tables.expenseTable || []);
             setExpenseColumns(statsRes.data.tables.expenseColumns || []);
             setSharedInvoices(sharedRes.data || []);
+            // Set all-time balance history once — never changed by filters
+            setAllTimeMonthlyData(allTimeRes.data.charts.monthlyStats || []);
 
             if (statsRes.data.availableYears && statsRes.data.availableYears.length > 0) {
                 const years = statsRes.data.availableYears.map((y: any) => Number(y));
@@ -235,7 +254,8 @@ export default function DashboardPage() {
         const params = new URLSearchParams({
             from: dates.from.toISOString(),
             to: dates.to.toISOString(),
-            sections: 'summary,monthlyStats,expenseTable'
+            years: comparisonYears.join(','),
+            sections: 'summary,monthlyStats,expenseTable,yearlyComparison'
         });
 
         const res = await api.get(`/dashboard/stats?${params}`);
@@ -243,6 +263,9 @@ export default function DashboardPage() {
         setMonthlyData(res.data.charts.monthlyStats || []);
         setExpenseTable(res.data.tables.expenseTable || []);
         setExpenseColumns(res.data.tables.expenseColumns || []);
+        if (res.data.charts.yearlyComparison) {
+            setYearlyData(res.data.charts.yearlyComparison);
+        }
     } catch (e) {
         console.error("Failed to load filtered stats", e);
     } finally {
@@ -300,18 +323,52 @@ export default function DashboardPage() {
     return totals;
   }, [expenseTable, expenseColumns]);
 
-  // --- CUMULATIVE BALANCE CALCULATION ---
+  // --- CUMULATIVE BALANCE CALCULATION (ALL-TIME — not affected by global filters) ---
   const historyWithBalance = useMemo(() => {
-    if (!monthlyData || monthlyData.length === 0) return [];
-    
-    // The backend already returns cumulative balance starting from opening balance,
-    // so we can use the backend balance directly or verify it.
-    return [...monthlyData].sort((a, b) => {
+    const data = allTimeMonthlyData.length > 0 ? allTimeMonthlyData : monthlyData;
+    if (!data || data.length === 0) return [];
+    return [...data].sort((a, b) => {
         const dateA = parseFlexibleDate(a.date || a.month);
         const dateB = parseFlexibleDate(b.date || b.month);
         return dateA.getTime() - dateB.getTime();
     });
-  }, [monthlyData]);
+  }, [allTimeMonthlyData, monthlyData]);
+
+  // --- BALANCES HISTORY CARD FILTERS ---
+  const filteredHistoryWithBalance = useMemo(() => {
+    if (historyFilter === 'all' && !historyCustomRange) {
+      return historyWithBalance;
+    }
+    const dates = getOverviewDates(historyFilter, historyCustomRange);
+    const fromTime = startOfDay(dates.from).getTime();
+    const toTime = endOfDay(dates.to).getTime();
+
+    return historyWithBalance.filter((m: any) => {
+      const d = parseFlexibleDate(m.month || m.date);
+      if (isNaN(d.getTime())) return true;
+      const t = d.getTime();
+      return t >= fromTime && t <= toTime;
+    });
+  }, [historyWithBalance, historyFilter, historyCustomRange]);
+
+  // --- PENDING INVOICES CARD FILTERS ---
+  const filteredPendingInvoices = useMemo(() => {
+    if (pendingFilter === 'all' && !pendingCustomRange) {
+      return sharedInvoices;
+    }
+    const dates = getOverviewDates(pendingFilter, pendingCustomRange);
+    const fromTime = startOfDay(dates.from).getTime();
+    const toTime = endOfDay(dates.to).getTime();
+
+    return sharedInvoices.filter((inv: any) => {
+      const dStr = inv.issue_date || inv.due_date || inv.created_at;
+      if (!dStr) return true;
+      const d = new Date(dStr);
+      if (isNaN(d.getTime())) return true;
+      const t = d.getTime();
+      return t >= fromTime && t <= toTime;
+    });
+  }, [sharedInvoices, pendingFilter, pendingCustomRange]);
 
   if (!mounted) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>;
   if (loading) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>;
@@ -580,9 +637,81 @@ export default function DashboardPage() {
       {/* 5. BOTTOM TABLES */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
           <Card className="shadow-sm border border-border/50 bg-card min-w-0">
-            <CardHeader>
-                <CardTitle>Balances History</CardTitle>
-                <CardDescription>Monthly revenue vs expenses</CardDescription>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4">
+                <div>
+                    <CardTitle>Balances History</CardTitle>
+                    <CardDescription>Monthly revenue vs expenses</CardDescription>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {/* Preset Filter */}
+                    <Select value={historyFilter} onValueChange={(val) => { setHistoryFilter(val); setHistoryCustomRange(undefined); }}>
+                        <SelectTrigger className="h-8 w-[140px] bg-background border-input shadow-sm text-xs font-semibold">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <div className="max-h-[260px] overflow-y-auto p-1">
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1 tracking-wider">Presets</p>
+                                <SelectItem value="all">All Time</SelectItem>
+                                <SelectItem value="today">Today</SelectItem>
+                                <SelectItem value="yesterday">Yesterday</SelectItem>
+                                <SelectItem value="this_week">This Week</SelectItem>
+                                <SelectItem value="last_week">Last Week</SelectItem>
+                                <SelectItem value="this_month">This Month</SelectItem>
+                                <SelectItem value="last_month">Last Month</SelectItem>
+                                <SelectItem value="this_quarter">This Quarter</SelectItem>
+                                <SelectItem value="this_year">This Year (Jan-Dec)</SelectItem>
+                                
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1 mt-2 tracking-wider">Financial Years</p>
+                                {activeYears.map(year => (
+                                    <SelectItem key={year} value={`FY-${year}`}>
+                                        FY {year}-{(year+1).toString().slice(-2)}
+                                    </SelectItem>
+                                ))}
+                            </div>
+                        </SelectContent>
+                    </Select>
+
+                    {/* Custom Range Calendar */}
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" size="sm" className={cn("h-8 w-[150px] justify-start text-left text-xs font-semibold px-2", !historyCustomRange && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-1 h-3 w-3 shrink-0" />
+                                {historyCustomRange?.from ? (
+                                    historyCustomRange.to ? (
+                                        <>{format(historyCustomRange.from, "LLL dd")} - {format(historyCustomRange.to, "LLL dd")}</>
+                                    ) : format(historyCustomRange.from, "LLL dd, yyyy")
+                                ) : <span className="truncate">Custom Range</span>}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="end">
+                            <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={historyCustomRange?.from}
+                                selected={historyCustomRange}
+                                onSelect={(range) => {
+                                    if (range) {
+                                        setHistoryFilter('custom');
+                                        setHistoryCustomRange(range);
+                                    }
+                                }}
+                                numberOfMonths={2}
+                            />
+                        </PopoverContent>
+                    </Popover>
+
+                    {(historyFilter !== 'all' || historyCustomRange) && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            onClick={() => { setHistoryFilter('all'); setHistoryCustomRange(undefined); }}
+                            title="Reset Filter"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </Button>
+                    )}
+                </div>
             </CardHeader>
             <CardContent className="p-0 md:p-6">
                 <div className="h-[350px] overflow-y-auto">
@@ -597,16 +726,24 @@ export default function DashboardPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {[...historyWithBalance].reverse().map((m: any, index: number) => (
-                                <TableRow key={`${m.month}-${m.balance || 0}-${index}`}>
-                                    <TableCell className="font-semibold text-foreground whitespace-nowrap">{m.month}</TableCell>
-                                    <TableCell className="text-right text-green-600 font-semibold whitespace-nowrap">+{formatCurrency(m.revenue)}</TableCell>
-                                    <TableCell className="text-right text-red-600 font-semibold whitespace-nowrap">-{formatCurrency(m.expense)}</TableCell>
-                                    <TableCell className={`text-right font-bold whitespace-nowrap ${m.balance >= 0 ? 'text-primary' : 'text-orange-600'}`}>
-                                        {formatCurrency(m.balance)}
+                            {filteredHistoryWithBalance.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground font-semibold">
+                                        No balance records for selected filter.
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                            ) : (
+                                [...filteredHistoryWithBalance].reverse().map((m: any, index: number) => (
+                                    <TableRow key={`${m.month}-${m.balance || 0}-${index}`}>
+                                        <TableCell className="font-semibold text-foreground whitespace-nowrap">{m.month}</TableCell>
+                                        <TableCell className="text-right text-green-600 font-semibold whitespace-nowrap">+{formatCurrency(m.revenue)}</TableCell>
+                                        <TableCell className="text-right text-red-600 font-semibold whitespace-nowrap">-{formatCurrency(m.expense)}</TableCell>
+                                        <TableCell className={`text-right font-bold whitespace-nowrap ${m.balance >= 0 ? 'text-primary' : 'text-orange-600'}`}>
+                                            {formatCurrency(m.balance)}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
                         </TableBody>
                     </Table>
                   </div>
@@ -616,9 +753,81 @@ export default function DashboardPage() {
 
         {/* PENDING/SHARED INVOICES */}
         <Card className="shadow-sm border border-border/50 bg-card min-w-0">
-            <CardHeader>
-                <CardTitle>Pending Invoices</CardTitle>
-                <CardDescription>All invoices awaiting client payment.</CardDescription>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4">
+                <div>
+                    <CardTitle>Pending Invoices</CardTitle>
+                    <CardDescription>All invoices awaiting client payment.</CardDescription>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {/* Preset Filter */}
+                    <Select value={pendingFilter} onValueChange={(val) => { setPendingFilter(val); setPendingCustomRange(undefined); }}>
+                        <SelectTrigger className="h-8 w-[140px] bg-background border-input shadow-sm text-xs font-semibold">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <div className="max-h-[260px] overflow-y-auto p-1">
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1 tracking-wider">Presets</p>
+                                <SelectItem value="all">All Time</SelectItem>
+                                <SelectItem value="today">Today</SelectItem>
+                                <SelectItem value="yesterday">Yesterday</SelectItem>
+                                <SelectItem value="this_week">This Week</SelectItem>
+                                <SelectItem value="last_week">Last Week</SelectItem>
+                                <SelectItem value="this_month">This Month</SelectItem>
+                                <SelectItem value="last_month">Last Month</SelectItem>
+                                <SelectItem value="this_quarter">This Quarter</SelectItem>
+                                <SelectItem value="this_year">This Year (Jan-Dec)</SelectItem>
+                                
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1 mt-2 tracking-wider">Financial Years</p>
+                                {activeYears.map(year => (
+                                    <SelectItem key={year} value={`FY-${year}`}>
+                                        FY {year}-{(year+1).toString().slice(-2)}
+                                    </SelectItem>
+                                ))}
+                            </div>
+                        </SelectContent>
+                    </Select>
+
+                    {/* Custom Range Calendar */}
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" size="sm" className={cn("h-8 w-[150px] justify-start text-left text-xs font-semibold px-2", !pendingCustomRange && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-1 h-3 w-3 shrink-0" />
+                                {pendingCustomRange?.from ? (
+                                    pendingCustomRange.to ? (
+                                        <>{format(pendingCustomRange.from, "LLL dd")} - {format(pendingCustomRange.to, "LLL dd")}</>
+                                    ) : format(pendingCustomRange.from, "LLL dd, yyyy")
+                                ) : <span className="truncate">Custom Range</span>}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="end">
+                            <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={pendingCustomRange?.from}
+                                selected={pendingCustomRange}
+                                onSelect={(range) => {
+                                    if (range) {
+                                        setPendingFilter('custom');
+                                        setPendingCustomRange(range);
+                                    }
+                                }}
+                                numberOfMonths={2}
+                            />
+                        </PopoverContent>
+                    </Popover>
+
+                    {(pendingFilter !== 'all' || pendingCustomRange) && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            onClick={() => { setPendingFilter('all'); setPendingCustomRange(undefined); }}
+                            title="Reset Filter"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </Button>
+                    )}
+                </div>
             </CardHeader>
             <CardContent className="p-0 md:p-6 overflow-x-auto">
                 <Table>
@@ -631,9 +840,9 @@ export default function DashboardPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {sharedInvoices.length === 0 ? (
-                            <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground font-semibold">No shared or overdue invoices.</TableCell></TableRow>
-                        ) : sharedInvoices.map((inv: any) => (
+                        {filteredPendingInvoices.length === 0 ? (
+                            <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground font-semibold">No pending invoices for selected filter.</TableCell></TableRow>
+                        ) : filteredPendingInvoices.map((inv: any) => (
                             <TableRow key={inv.id}>
                                 <TableCell className="font-mono text-xs text-foreground font-semibold whitespace-nowrap">{inv.invoice_number}</TableCell>
                                 <TableCell className="text-muted-foreground text-sm font-semibold truncate max-w-[120px]" title={inv.client?.company_name}>{inv.client?.company_name || "Unknown"}</TableCell>

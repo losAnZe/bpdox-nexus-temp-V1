@@ -19,8 +19,8 @@ const PERMISSION_MODULES = [
   { key: "invoices", label: "Invoices", actions: ["view", "create", "edit", "delete", "email"] },
   { key: "quotations", label: "Quotations", actions: ["view", "create", "edit", "delete", "email"] },
   { key: "clients", label: "Clients", actions: ["view", "create", "edit", "delete"] },
-  { key: "assets", label: "Client Assets", actions: ["view", "create", "edit", "delete"] },
-  { key: "vault", label: "Credential Vault", actions: ["view", "create", "edit", "delete"] },
+  { key: "assets", label: "Client Assets", actions: ["view", "create", "edit", "delete", "view_confidential"] },
+  { key: "vault", label: "Credential Vault", actions: ["view", "create", "edit", "delete", "view_confidential"] },
   { key: "expenses", label: "Expenses", actions: ["view", "create", "edit", "delete"] },
   { key: "reports", label: "Financial Ledger", actions: ["view"] },
   { key: "activity", label: "Activity Log", actions: ["view"] },
@@ -294,6 +294,7 @@ export function TeamSettings({ disabled }: TeamSettingsProps) {
                     <TableHead className="text-center">Edit</TableHead>
                     <TableHead className="text-center">Delete</TableHead>
                     <TableHead className="text-center">Email</TableHead>
+                    <TableHead className="text-center text-amber-600 dark:text-amber-400" title="Allow user to see Confidential assets in Client Assets">🔒 Confidential</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -303,21 +304,26 @@ export function TeamSettings({ disabled }: TeamSettingsProps) {
                     return (
                       <TableRow key={m.key}>
                         <TableCell className="font-semibold text-sm">{m.label}</TableCell>
-                        {["view", "create", "edit", "delete", "email"].map(action => {
+                        {["view", "create", "edit", "delete", "email", "view_confidential"].map(action => {
                           const isSupported = m.actions.includes(action);
                           const isChecked = activeActions.includes(action);
+                          const isConfidentialCol = action === 'view_confidential';
 
                           if (!isSupported) {
                             return <TableCell key={action} className="text-center text-muted-foreground/30">—</TableCell>;
                           }
 
                           return (
-                            <TableCell key={action} className="text-center cursor-pointer hover:bg-muted/30" onClick={() => togglePermission(m.key, action)}>
+                            <TableCell
+                              key={action}
+                              className={`text-center cursor-pointer hover:bg-muted/30 ${isConfidentialCol && isChecked ? 'bg-amber-50 dark:bg-amber-900/10' : ''}`}
+                              onClick={() => togglePermission(m.key, action)}
+                            >
                               <input 
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={() => {}} // Handled by TableCell onClick
-                                className="w-4 h-4 text-primary rounded border-border focus:ring-primary cursor-pointer"
+                                className={`w-4 h-4 rounded border-border focus:ring-primary cursor-pointer ${isConfidentialCol ? 'accent-amber-500' : 'text-primary'}`}
                               />
                             </TableCell>
                           );

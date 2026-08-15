@@ -13,8 +13,28 @@ const prisma = new PrismaClient();
 router.get('/', checkPermission('assets', 'view'), async (req: Request, res: Response) => {
   try {
     const { client_id, asset_type, status, search } = req.query;
+    const authReq = req as AuthRequest;
+
+    // Determine if the requesting user can see confidential assets
+    const isSudoAdmin = authReq.user?.role === 'SUDO_ADMIN';
+    let canViewConfidential = isSudoAdmin;
+
+    if (!isSudoAdmin && authReq.user?.id) {
+      const userRecord = await prisma.user.findUnique({
+        where: { id: authReq.user.id },
+        select: { permissions: true }
+      });
+      const perms = (userRecord?.permissions as any) || {};
+      const assetPerms: string[] = Array.isArray(perms?.assets) ? perms.assets : [];
+      canViewConfidential = assetPerms.includes('view_confidential');
+    }
 
     const where: Prisma.ClientAssetWhereInput = {};
+
+    // Hide confidential assets from unauthorized users
+    if (!canViewConfidential) {
+      where.is_confidential = false;
+    }
 
     if (client_id) {
       where.client_id = Number(client_id);
@@ -101,7 +121,8 @@ router.post('/', checkPermission('assets', 'create'), async (req: Request, res: 
       status,
       alert_email,
       notes,
-      attachments
+      attachments,
+      is_confidential
     } = req.body;
 
     if (!client_id || !asset_type || !asset_name || !expiry_date || renewal_cost === undefined) {
@@ -141,7 +162,8 @@ router.post('/', checkPermission('assets', 'create'), async (req: Request, res: 
         alert_email: alert_email ? String(alert_email).trim() : null,
         notes: notes || "",
         attachments: attachments || [],
-        reminders_sent: []
+        reminders_sent: [],
+        is_confidential: Boolean(is_confidential) || false
       }
     });
 
@@ -191,7 +213,8 @@ router.put('/:id', checkPermission('assets', 'edit'), async (req: Request, res: 
       status,
       alert_email,
       notes,
-      attachments
+      attachments,
+      is_confidential
     } = req.body;
 
     const existing = await prisma.clientAsset.findUnique({ where: { id } });
@@ -239,7 +262,8 @@ router.put('/:id', checkPermission('assets', 'edit'), async (req: Request, res: 
         alert_email: alert_email !== undefined ? (alert_email ? String(alert_email).trim() : null) : undefined,
         notes,
         attachments,
-        reminders_sent: updatedReminders as Prisma.InputJsonValue
+        reminders_sent: updatedReminders as Prisma.InputJsonValue,
+        is_confidential: is_confidential !== undefined ? Boolean(is_confidential) : undefined
       }
     });
 

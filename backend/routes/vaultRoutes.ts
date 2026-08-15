@@ -11,8 +11,28 @@ const prisma = new PrismaClient();
 router.get('/', checkPermission('vault', 'view'), async (req: Request, res: Response) => {
   try {
     const { client_id, category, search } = req.query;
+    const authReq = req as AuthRequest;
+
+    // Determine if the requesting user can see confidential credentials
+    const isSudoAdmin = authReq.user?.role === 'SUDO_ADMIN';
+    let canViewConfidential = isSudoAdmin;
+
+    if (!isSudoAdmin && authReq.user?.id) {
+      const userRecord = await prisma.user.findUnique({
+        where: { id: authReq.user.id },
+        select: { permissions: true }
+      });
+      const perms = (userRecord?.permissions as any) || {};
+      const vaultPerms: string[] = Array.isArray(perms?.vault) ? perms.vault : [];
+      canViewConfidential = vaultPerms.includes('view_confidential');
+    }
     
     let where: any = {};
+
+    // Hide confidential credentials from unauthorized users
+    if (!canViewConfidential) {
+      where.is_confidential = false;
+    }
     
     if (client_id && client_id !== 'ALL') {
       where.client_id = Number(client_id);
@@ -97,7 +117,7 @@ router.post('/:id/reveal', checkPermission('vault', 'view'), async (req: Request
 // POST: Create New Credential
 router.post('/', checkPermission('vault', 'create'), async (req: Request, res: Response) => {
   try {
-    const { client_id, title, category, url, username, password, port, notes } = req.body;
+    const { client_id, title, category, url, username, password, port, notes, is_confidential } = req.body;
 
     if (!client_id || !title || !username || !password) {
       return res.status(400).json({ error: "Client, Title, Username, and Password are required." });
@@ -114,7 +134,8 @@ router.post('/', checkPermission('vault', 'create'), async (req: Request, res: R
         username,
         password: encryptedPassword,
         port: port || null,
-        notes: notes || null
+        notes: notes || null,
+        is_confidential: Boolean(is_confidential) || false
       },
       include: {
         client: { select: { company_name: true } }
@@ -147,7 +168,7 @@ router.post('/', checkPermission('vault', 'create'), async (req: Request, res: R
 router.put('/:id', checkPermission('vault', 'edit'), async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
-    const { client_id, title, category, url, username, password, port, notes } = req.body;
+    const { client_id, title, category, url, username, password, port, notes, is_confidential } = req.body;
 
     const existing = await prisma.clientCredential.findUnique({ where: { id } });
     if (!existing) {
@@ -170,7 +191,8 @@ router.put('/:id', checkPermission('vault', 'edit'), async (req: Request, res: R
         username: username || existing.username,
         password: updatedPassword,
         port: port !== undefined ? port : existing.port,
-        notes: notes !== undefined ? notes : existing.notes
+        notes: notes !== undefined ? notes : existing.notes,
+        is_confidential: is_confidential !== undefined ? Boolean(is_confidential) : existing.is_confidential
       },
       include: {
         client: { select: { company_name: true } }

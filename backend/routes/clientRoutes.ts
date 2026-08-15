@@ -17,6 +17,31 @@ router.get('/', checkPermission('clients', 'view'), async (req, res) => {
   }
 });
 
+// GET: Lightweight client names list (for Assets/Vault dropdowns — no full clients permission needed)
+// Accessible to anyone with assets OR vault view permission
+router.get('/names', async (req: any, res) => {
+  try {
+    const user = req.user;
+    const perms = user?.permissions || {};
+    const hasAssets = perms?.assets?.view !== false;
+    const hasVault = perms?.vault?.view !== false;
+    const hasClients = perms?.clients?.view !== false;
+    const isOwner = user?.role === 'owner' || user?.role === 'admin';
+
+    if (!isOwner && !hasAssets && !hasVault && !hasClients) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const clients = await prisma.client.findMany({
+      select: { id: true, company_name: true },
+      orderBy: { company_name: 'asc' }
+    });
+    res.json(clients);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch client names" });
+  }
+});
+
 // GET: Single Client
 router.get('/:id', checkPermission('clients', 'view'), async (req, res) => {
   try {

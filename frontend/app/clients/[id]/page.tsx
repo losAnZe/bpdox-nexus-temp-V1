@@ -105,13 +105,15 @@ export default function EditClientPage() {
   // 3. Submit
   const handleSubmit = async () => {
     if (!formData.company_name) return alert("Company Name is required.");
-    if (states.length > 0 && !formData.state_code) return alert("Please select a State/Province.");
+    if (formData.country === 'India' && !formData.state_code) {
+      return alert("Please select an Indian State for GST calculation.");
+    }
 
     setSaving(true);
     try {
       await api.put(`/clients/${params.id}`, {
           ...formData,
-          state_code: formData.state_code ? Number(formData.state_code) : undefined
+          state_code: formData.state_code ? Number(formData.state_code) : 99
       });
       alert("Client updated successfully!");
       router.push('/clients');
@@ -190,8 +192,8 @@ export default function EditClientPage() {
                             disabled={statesLoading || states.length === 0}
                         >
                             <option value="">{states.length === 0 ? "No states available" : "Select State..."}</option>
-                            {states.map((state) => (
-                                <option key={state.code} value={state.code}>
+                            {states.map((state, idx) => (
+                                <option key={`${state.code}-${state.name}-${idx}`} value={state.code}>
                                     {state.name}
                                 </option>
                             ))}

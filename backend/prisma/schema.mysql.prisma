@@ -286,6 +286,7 @@ model ClientAsset {
   notes           String?  @db.Text
   attachments     Json?    // Array of file path strings
   reminders_sent  Json?    // Array of reminder days sent: [30, 15, 7, 3, 1, 0]
+  is_confidential Boolean  @default(false) // Hidden from users without view_confidential permission
   
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
@@ -309,6 +310,7 @@ model ClientCredential {
   password    String   // Encrypted at rest (AES-256-GCM)
   port        String?  // e.g. "22", "21", "3306"
   notes       String?
+  is_confidential Boolean @default(false) // Hidden from users without vault view_confidential permission
   
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt

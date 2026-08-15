@@ -66,15 +66,18 @@ export default function NewClientPage() {
 
   const handleSubmit = async () => {
     if (!formData.company_name) return alert("Company Name is required.");
-    // State is required only if the list is not empty (some small countries might not have states in DB)
-    if (states.length > 0 && !formData.state_code) return alert("Please select a State/Province.");
+    
+    // State is required for India for GST calculation
+    if (formData.country === 'India' && !formData.state_code) {
+      return alert("Please select an Indian State for GST calculation.");
+    }
 
     setLoading(true);
     try {
       await api.post('/clients', {
         ...formData,
-        // If no state selected (and none available), send null to avoid DB error
-        state_code: formData.state_code ? Number(formData.state_code) : undefined
+        // If state_code selected use it, else default to 99 (International / Export)
+        state_code: formData.state_code ? Number(formData.state_code) : 99
       });
       alert("Client created successfully!");
       router.push('/clients');
@@ -149,8 +152,8 @@ export default function NewClientPage() {
                         disabled={statesLoading || states.length === 0}
                     >
                         <option value="">{states.length === 0 ? "No states available" : "Select State..."}</option>
-                        {states.map((state) => (
-                            <option key={state.code} value={state.code}>
+                        {states.map((state, idx) => (
+                            <option key={`${state.code}-${state.name}-${idx}`} value={state.code}>
                                 {state.name}
                             </option>
                         ))}

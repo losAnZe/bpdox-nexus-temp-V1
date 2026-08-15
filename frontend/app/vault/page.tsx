@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast-context";
 import { usePermissions } from "@/hooks/use-permissions";
+import { cn } from "@/lib/utils";
 
 const CATEGORIES = [
   "Hosting & cPanel",
@@ -42,6 +43,7 @@ interface Credential {
   password?: string;
   port?: string;
   notes?: string;
+  is_confidential?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -78,7 +80,8 @@ export default function VaultPage() {
     username: "",
     password: "",
     port: "",
-    notes: ""
+    notes: "",
+    is_confidential: false
   });
 
   const canView = hasPermission('vault', 'view');
@@ -90,7 +93,7 @@ export default function VaultPage() {
     try {
       const [credRes, clientRes] = await Promise.all([
         api.get('/vault'),
-        api.get('/clients')
+        api.get('/clients/names').catch(() => ({ data: [] }))
       ]);
       setCredentials(credRes.data);
       setClients(clientRes.data);
@@ -174,7 +177,8 @@ export default function VaultPage() {
       username: "",
       password: "",
       port: "",
-      notes: ""
+      notes: "",
+      is_confidential: false
     });
     setFormOpen(true);
   };
@@ -191,7 +195,8 @@ export default function VaultPage() {
       username: cred.username,
       password: "••••••••",
       port: cred.port || "",
-      notes: cred.notes || ""
+      notes: cred.notes || "",
+      is_confidential: cred.is_confidential || false
     });
     setFormOpen(true);
   };
@@ -351,9 +356,16 @@ export default function VaultPage() {
                       </div>
                     </div>
                     
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-muted text-muted-foreground border shrink-0">
-                      {cred.category}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {cred.is_confidential && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">
+                          <Lock className="w-2.5 h-2.5" /> Confidential
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-muted text-muted-foreground border">
+                        {cred.category}
+                      </span>
+                    </div>
                   </div>
                 </CardHeader>
 
@@ -568,6 +580,37 @@ export default function VaultPage() {
                 value={formData.notes} 
                 onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))}
               />
+            </div>
+
+            {/* Confidential Toggle */}
+            <div
+              onClick={() => setFormData(p => ({ ...p, is_confidential: !p.is_confidential }))}
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all select-none",
+                formData.is_confidential
+                  ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600"
+                  : "border-border bg-muted/30 hover:border-muted-foreground/30"
+              )}
+            >
+              <div className={cn(
+                "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all",
+                formData.is_confidential ? "bg-amber-500 border-amber-500" : "border-muted-foreground"
+              )}>
+                {formData.is_confidential && (
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+              <Lock className={cn("w-4 h-4 flex-shrink-0", formData.is_confidential ? "text-amber-600" : "text-muted-foreground")} />
+              <div className="flex-1">
+                <p className={cn("text-sm font-semibold", formData.is_confidential ? "text-amber-700 dark:text-amber-400" : "text-foreground")}>
+                  Mark as Confidential
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Only Sudo Admin and users with special permission can view this credential.
+                </p>
+              </div>
             </div>
 
             <DialogFooter className="mt-4">

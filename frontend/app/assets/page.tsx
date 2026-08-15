@@ -12,12 +12,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { 
   Plus, Search, Loader2, Eye, Pencil, Trash, FileDown, Calendar as CalendarIcon, 
-  AlertTriangle, CheckCircle, Clock, ShieldAlert, FolderOpen, ArrowUpDown, X, Paperclip
+  AlertTriangle, CheckCircle, Clock, ShieldAlert, FolderOpen, ArrowUpDown, X, Paperclip, Lock
 } from "lucide-react";
 import { format, isWithinInterval, startOfDay, endOfDay, addDays } from "date-fns";
 import { useToast } from "@/components/ui/toast-context";
 import { useRole } from "@/hooks/use-role";
 import { usePermissions } from "@/hooks/use-permissions";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend
 } from "recharts";
@@ -60,6 +63,7 @@ interface ClientAsset {
   notes?: string;
   attachments?: string[];
   reminders_sent?: number[];
+  is_confidential?: boolean;
   created_at: string;
 }
 
@@ -104,7 +108,8 @@ export default function ClientAssetsPage() {
     status: "ACTIVE",
     alert_email: "",
     notes: "",
-    attachments: [] as string[]
+    attachments: [] as string[],
+    is_confidential: false
   });
 
   // Sort State
@@ -117,7 +122,7 @@ export default function ClientAssetsPage() {
       setLoading(true);
       const [assetsRes, clientsRes] = await Promise.all([
         api.get("/assets"),
-        api.get("/clients")
+        api.get("/clients/names").catch(() => ({ data: [] }))
       ]);
       setAssets(assetsRes.data);
       setClients(clientsRes.data);
@@ -294,7 +299,8 @@ export default function ClientAssetsPage() {
       status: "ACTIVE",
       alert_email: "",
       notes: "",
-      attachments: []
+      attachments: [],
+      is_confidential: false
     });
     setFormOpen(true);
   };
@@ -317,7 +323,8 @@ export default function ClientAssetsPage() {
       status: asset.status,
       alert_email: asset.alert_email || "",
       notes: asset.notes || "",
-      attachments: asset.attachments || []
+      attachments: asset.attachments || [],
+      is_confidential: asset.is_confidential || false
     });
     setFormOpen(true);
   };
@@ -706,7 +713,16 @@ export default function ClientAssetsPage() {
                   return (
                     <TableRow key={asset.id} className="cursor-pointer hover:bg-muted/40 transition-colors" onClick={() => viewAssetDetails(asset)}>
                       <TableCell className="font-semibold text-foreground">{asset.client.company_name}</TableCell>
-                      <TableCell className="font-medium text-foreground">{asset.asset_name}</TableCell>
+                      <TableCell className="font-medium text-foreground">
+                        <div className="flex items-center gap-1.5">
+                          {(asset as any).is_confidential && (
+                            <span title="Confidential" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">
+                              <Lock className="w-2.5 h-2.5" /> Confidential
+                            </span>
+                          )}
+                          {asset.asset_name}
+                        </div>
+                      </TableCell>
                       <TableCell>{asset.asset_type}</TableCell>
                       <TableCell className="text-muted-foreground">{asset.provider || '-'}</TableCell>
                       <TableCell>
@@ -843,39 +859,109 @@ export default function ClientAssetsPage() {
               {/* Dates */}
               <div className="space-y-2">
                 <Label htmlFor="purchase_date">Purchase Date</Label>
-                <Input 
-                  id="purchase_date" 
-                  type="date"
-                  value={formData.purchase_date} 
-                  onChange={e => setFormData(prev => ({ ...prev, purchase_date: e.target.value }))}
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-medium h-10 border-input bg-background",
+                        !formData.purchase_date && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
+                      {formData.purchase_date ? (
+                        format(new Date(formData.purchase_date + 'T00:00:00'), "PPP")
+                      ) : (
+                        <span>Select Purchase Date</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={formData.purchase_date ? new Date(formData.purchase_date + 'T00:00:00') : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          setFormData(prev => ({ ...prev, purchase_date: format(date, "yyyy-MM-dd") }));
+                        }
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="activation_date">Activation Date</Label>
-                <Input 
-                  id="activation_date" 
-                  type="date"
-                  value={formData.activation_date} 
-                  onChange={e => setFormData(prev => ({ ...prev, activation_date: e.target.value }))}
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-medium h-10 border-input bg-background",
+                        !formData.activation_date && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
+                      {formData.activation_date ? (
+                        format(new Date(formData.activation_date + 'T00:00:00'), "PPP")
+                      ) : (
+                        <span>Select Activation Date</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={formData.activation_date ? new Date(formData.activation_date + 'T00:00:00') : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          setFormData(prev => ({ ...prev, activation_date: format(date, "yyyy-MM-dd") }));
+                        }
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="expiry_date">Expiry Date *</Label>
-                <Input 
-                  id="expiry_date" 
-                  type="date"
-                  value={formData.expiry_date} 
-                  onChange={e => {
-                    const newExpiry = e.target.value;
-                    setFormData(prev => ({ 
-                      ...prev, 
-                      expiry_date: newExpiry,
-                      status: getAutoStatus(newExpiry, prev.status)
-                    }));
-                  }}
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-medium h-10 border-input bg-background",
+                        !formData.expiry_date && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
+                      {formData.expiry_date ? (
+                        format(new Date(formData.expiry_date + 'T00:00:00'), "PPP")
+                      ) : (
+                        <span>Select Expiry Date</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={formData.expiry_date ? new Date(formData.expiry_date + 'T00:00:00') : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          const newExpiry = format(date, "yyyy-MM-dd");
+                          setFormData(prev => ({ 
+                            ...prev, 
+                            expiry_date: newExpiry,
+                            status: getAutoStatus(newExpiry, prev.status)
+                          }));
+                        }
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
 
               {/* Billing Cycle */}
@@ -953,6 +1039,39 @@ export default function ClientAssetsPage() {
                 )}
               </div>
 
+              {/* Confidential Toggle */}
+              <div className="col-span-2">
+                <div
+                  onClick={() => setFormData(prev => ({ ...prev, is_confidential: !prev.is_confidential }))}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all select-none",
+                    formData.is_confidential
+                      ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600"
+                      : "border-border bg-muted/30 hover:border-muted-foreground/30"
+                  )}
+                >
+                  <div className={cn(
+                    "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all",
+                    formData.is_confidential ? "bg-amber-500 border-amber-500" : "border-muted-foreground"
+                  )}>
+                    {formData.is_confidential && (
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                  <Lock className={cn("w-4 h-4 flex-shrink-0", formData.is_confidential ? "text-amber-600" : "text-muted-foreground")} />
+                  <div className="flex-1">
+                    <p className={cn("text-sm font-semibold", formData.is_confidential ? "text-amber-700 dark:text-amber-400" : "text-foreground")}>
+                      Mark as Confidential
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Only Sudo Admin and users with special permission can view this asset.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
             </div>
             
             <DialogFooter className="mt-6">
@@ -971,7 +1090,7 @@ export default function ClientAssetsPage() {
           {selectedAsset && (
             <>
               <DialogHeader>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wide
                     ${selectedAsset.status === 'ACTIVE' ? 'bg-green-50 text-green-700 border-green-200' : ''}
                     ${selectedAsset.status === 'EXPIRING' ? 'bg-amber-50 text-amber-700 border-amber-200' : ''}
@@ -980,6 +1099,11 @@ export default function ClientAssetsPage() {
                   `}>
                     {selectedAsset.status}
                   </span>
+                  {(selectedAsset as any).is_confidential && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">
+                      <Lock className="w-2.5 h-2.5" /> Confidential
+                    </span>
+                  )}
                   <span className="text-xs text-muted-foreground font-mono">ID: {selectedAsset.id}</span>
                 </div>
                 <DialogTitle className="text-2xl font-bold mt-2">{selectedAsset.asset_name}</DialogTitle>
