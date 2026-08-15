@@ -1,19 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { ExpenseService } from '../services/ExpenseService';
 import { ActivityService } from '../services/ActivityService';
-import { AuthRequest, authorize } from '../middleware/authMiddleware';
+import { AuthRequest, authorize, checkPermission } from '../middleware/authMiddleware';
 
 const router = Router();
 
 // GET /api/expenses?from=YYYY-MM-DD&to=YYYY-MM-DD
-router.get('/', async (req, res) => {
+router.get('/', checkPermission('expenses', 'view'), async (req, res) => {
   try {
       const { from, to } = req.query;
       
       const fromDate = from ? new Date(from as string) : undefined;
       const toDate = to ? new Date(to as string) : undefined;
 
-      // Pass dates to service (undefined if not provided)
       const expenses = await ExpenseService.getAllExpenses(fromDate, toDate);
       res.json(expenses);
   } catch (error) {
@@ -22,7 +21,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', checkPermission('expenses', 'create'), async (req: Request, res: Response) => {
   try {
     const expense = await ExpenseService.createExpense(req.body);
     const authReq = req as AuthRequest;
@@ -32,8 +31,7 @@ router.post('/', async (req: Request, res: Response) => {
   } catch (e) { res.status(500).json({ error: "Failed to create expense" }); }
 });
 
-// Delete restricted to Admins/Sudo
-router.delete('/:id', authorize(['SUDO_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+router.delete('/:id', checkPermission('expenses', 'delete'), async (req: Request, res: Response) => {
   try {
     await ExpenseService.deleteExpense(Number(req.params.id));
     const authReq = req as AuthRequest;

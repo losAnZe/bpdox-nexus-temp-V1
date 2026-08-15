@@ -6,8 +6,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useConfigurator } from "@/hooks/use-configurator";
 import { useRole } from "@/hooks/use-role";
+import { usePermissions } from "@/hooks/use-permissions";
 import { 
-  LayoutDashboard, FileText, Users, Settings, Wallet, 
+  LayoutDashboard, FileText, Users, Settings, Wallet, KeyRound,
   ChevronLeft, ChevronRight, Search, BookOpen, LogOut, User, MoreVertical, Activity, Package 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export function Sidebar({ className, hideLogo = false, forceExpand = false }: Si
   const router = useRouter();
   const { sidebarType, setSidebarType } = useConfigurator();
   const { role, isAdmin, isSudo } = useRole(); 
+  const { hasPermission } = usePermissions();
   
   // START: Dynamic Software Name Logic
   const [softwareName, setSoftwareName] = useState('InvoiceCore'); // Default fallback
@@ -67,17 +69,18 @@ export function Sidebar({ className, hideLogo = false, forceExpand = false }: Si
   const isMini = forceExpand ? false : sidebarType === 'mini';
   
   const navItems = [
-    { href: "/", label: "Dashboard", icon: LayoutDashboard, visible: true },
-    { href: "/invoices", label: "Invoices", icon: FileText, visible: true },
-    { href: "/quotations", label: "Quotations", icon: FileText, visible: true },
-    { href: "/clients", label: "Clients", icon: Users, visible: true },
-    { href: "/assets", label: "Client Assets", icon: Package, visible: true },
-    { href: "/expenses", label: "Expenses", icon: Wallet, visible: true },
+    { href: "/", label: "Dashboard", icon: LayoutDashboard, visible: hasPermission('dashboard', 'view') },
+    { href: "/invoices", label: "Invoices", icon: FileText, visible: hasPermission('invoices', 'view') },
+    { href: "/quotations", label: "Quotations", icon: FileText, visible: hasPermission('quotations', 'view') },
+    { href: "/clients", label: "Clients", icon: Users, visible: hasPermission('clients', 'view') },
+    { href: "/assets", label: "Client Assets", icon: Package, visible: hasPermission('assets', 'view') },
+    { href: "/vault", label: "Credential Vault", icon: KeyRound, visible: hasPermission('vault', 'view') },
+    { href: "/expenses", label: "Expenses", icon: Wallet, visible: hasPermission('expenses', 'view') },
     
-    // Admin & Sudo Only
-    { href: "/ledger", label: "Ledger", icon: BookOpen, visible: isAdmin }, 
-    { href: "/activity", label: "Activity Log", icon: Activity, visible: isAdmin }, 
-    { href: "/settings", label: "Settings", icon: Settings, visible: isAdmin }, 
+    // Financial & System Admin Only
+    { href: "/ledger", label: "Ledger", icon: BookOpen, visible: hasPermission('reports', 'view') }, 
+    { href: "/activity", label: "Activity Log", icon: Activity, visible: hasPermission('activity', 'view') }, 
+    { href: "/settings", label: "Settings", icon: Settings, visible: hasPermission('settings', 'view') }, 
   ];
 
   const isLinkActive = (href: string) => {

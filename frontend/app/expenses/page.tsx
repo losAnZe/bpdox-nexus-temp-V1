@@ -23,8 +23,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/hooks/use-permissions";
 
 export default function ExpensesPage() {
+  const { hasPermission } = usePermissions();
+  
+  const canCreate = hasPermission('expenses', 'create');
+  const canDelete = hasPermission('expenses', 'delete');
+
   const [expenses, setExpenses] = useState<any[]>([]);
   const [filteredExpenses, setFilteredExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,117 +211,119 @@ export default function ExpensesPage() {
           <p className="text-muted-foreground">Track company spending and overheads</p>
         </div>
         
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-                <Button 
-                    onClick={openNewExpenseDialog}
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 w-full md:w-auto"
-                >
-                    <Plus className="w-4 h-4 mr-2" /> Record Expense
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                    <DialogTitle>Add New Expense</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    
-                    {/* CATEGORY SELECTION */}
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <Label>Category</Label>
-                            {/* Toggle Button */}
-                            <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-6 text-xs text-primary hover:text-primary/80"
-                                onClick={() => {
-                                    setIsCustomCategory(!isCustomCategory);
-                                    setFormData({...formData, category: ''}); // Clear on toggle
-                                }}
-                            >
-                                {isCustomCategory ? (
-                                    <><ListFilter className="w-3 h-3 mr-1"/> Select Existing</>
-                                ) : (
-                                    <><PenLine className="w-3 h-3 mr-1"/> Create New</>
-                                )}
-                            </Button>
-                        </div>
+        {canCreate && (
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                  <Button 
+                      onClick={openNewExpenseDialog}
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 w-full md:w-auto"
+                  >
+                      <Plus className="w-4 h-4 mr-2" /> Record Expense
+                  </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                      <DialogTitle>Add New Expense</DialogTitle>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                      
+                      {/* CATEGORY SELECTION */}
+                      <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                              <Label>Category</Label>
+                              {/* Toggle Button */}
+                              <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-6 text-xs text-primary hover:text-primary/80"
+                                  onClick={() => {
+                                      setIsCustomCategory(!isCustomCategory);
+                                      setFormData({...formData, category: ''}); // Clear on toggle
+                                  }}
+                              >
+                                  {isCustomCategory ? (
+                                      <><ListFilter className="w-3 h-3 mr-1"/> Select Existing</>
+                                  ) : (
+                                      <><PenLine className="w-3 h-3 mr-1"/> Create New</>
+                                  )}
+                              </Button>
+                          </div>
 
-                        {isCustomCategory || existingCategories.length === 0 ? (
-                            <Input 
-                                placeholder="Type new category (e.g. Travel)" 
-                                value={formData.category} 
-                                onChange={(e) => setFormData({...formData, category: e.target.value})} 
-                                autoFocus
-                            />
-                        ) : (
-                            <Select 
-                                value={formData.category} 
-                                onValueChange={(val) => setFormData({...formData, category: val})}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select a category" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {existingCategories.map((cat) => (
-                                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        )}
-                    </div>
+                          {isCustomCategory || existingCategories.length === 0 ? (
+                              <Input 
+                                  placeholder="Type new category (e.g. Travel)" 
+                                  value={formData.category} 
+                                  onChange={(e) => setFormData({...formData, category: e.target.value})} 
+                                  autoFocus
+                              />
+                          ) : (
+                              <Select 
+                                  value={formData.category} 
+                                  onValueChange={(val) => setFormData({...formData, category: val})}
+                              >
+                                  <SelectTrigger>
+                                      <SelectValue placeholder="Select a category" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                      {existingCategories.map((cat) => (
+                                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                      ))}
+                                  </SelectContent>
+                              </Select>
+                          )}
+                      </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        {/* AMOUNT */}
-                        <div className="space-y-2">
-                            <Label>Amount</Label>
-                            <Input 
-                                type="number" 
-                                placeholder="0.00" 
-                                value={formData.amount} 
-                                onChange={(e) => setFormData({...formData, amount: e.target.value})} 
-                            />
-                        </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          {/* AMOUNT */}
+                          <div className="space-y-2">
+                              <Label>Amount</Label>
+                              <Input 
+                                  type="number" 
+                                  placeholder="0.00" 
+                                  value={formData.amount} 
+                                  onChange={(e) => setFormData({...formData, amount: e.target.value})} 
+                              />
+                          </div>
 
-                        {/* DATE */}
-                        <div className="space-y-2 flex flex-col">
-                            <Label>Date</Label>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button variant={"outline"} className="w-full pl-3 text-left font-normal">
-                                        {formData.date ? format(formData.date, "PPP") : <span>Pick a date</span>}
-                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar 
-                                        mode="single" 
-                                        selected={formData.date} 
-                                        onSelect={(date) => date && setFormData({...formData, date})} 
-                                        initialFocus 
-                                    />
-                                </PopoverContent>
-                            </Popover>
-                        </div>
-                    </div>
+                          {/* DATE */}
+                          <div className="space-y-2 flex flex-col">
+                              <Label>Date</Label>
+                              <Popover>
+                                  <PopoverTrigger asChild>
+                                      <Button variant={"outline"} className="w-full pl-3 text-left font-normal">
+                                          {formData.date ? format(formData.date, "PPP") : <span>Pick a date</span>}
+                                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                      </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0" align="start">
+                                      <Calendar 
+                                          mode="single" 
+                                          selected={formData.date} 
+                                          onSelect={(date) => date && setFormData({...formData, date})} 
+                                          initialFocus 
+                                      />
+                                  </PopoverContent>
+                              </Popover>
+                          </div>
+                      </div>
 
-                    <div className="space-y-2">
-                        <Label>Description</Label>
-                        <Textarea 
-                            placeholder="Optional notes..." 
-                            value={formData.description} 
-                            onChange={(e) => setFormData({...formData, description: e.target.value})} 
-                        />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button onClick={handleSubmit} disabled={isSaving}>
-                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Save Expense"}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                      <div className="space-y-2">
+                          <Label>Description</Label>
+                          <Textarea 
+                              placeholder="Optional notes..." 
+                              value={formData.description} 
+                              onChange={(e) => setFormData({...formData, description: e.target.value})} 
+                          />
+                      </div>
+                  </div>
+                  <DialogFooter>
+                      <Button onClick={handleSubmit} disabled={isSaving}>
+                          {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Save Expense"}
+                      </Button>
+                  </DialogFooter>
+              </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* METRICS & FILTERS ROW */}
@@ -445,9 +453,11 @@ export default function ExpensesPage() {
                                     - {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(expense.amount))}
                                 </TableCell>
                                 <TableCell className="hidden md:table-cell">
-                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500">
-                                        <Trash2 className="w-4 h-4" />
-                                    </Button>
+                                    {canDelete && (
+                                      <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500">
+                                          <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    )}
                                 </TableCell>
                             </TableRow>
                         ))}

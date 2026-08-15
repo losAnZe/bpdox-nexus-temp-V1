@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import { useToast } from "@/components/ui/toast-context";
+import { usePermissions } from "@/hooks/use-permissions";
 import MarkAsPaidDialog from '@/components/invoices/MarkAsPaidDialog';
 
 interface Invoice {
@@ -50,6 +51,13 @@ interface Invoice {
 export default function InvoiceListPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
+  
+  const canCreate = hasPermission('invoices', 'create');
+  const canEdit = hasPermission('invoices', 'edit');
+  const canDelete = hasPermission('invoices', 'delete');
+  const canEmail = hasPermission('invoices', 'email');
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -257,11 +265,13 @@ export default function InvoiceListPage() {
           <h1 className="text-3xl font-bold text-foreground">Invoices</h1>
           <p className="text-muted-foreground">Manage your billing history</p>
         </div>
-        <Link href="/invoices/new">
-          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25">
-            <Plus className="w-4 h-4 mr-2" /> Create New
-          </Button>
-        </Link>
+        {canCreate && (
+          <Link href="/invoices/new">
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25">
+              <Plus className="w-4 h-4 mr-2" /> Create New
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* FILTER BAR */}
@@ -407,23 +417,36 @@ export default function InvoiceListPage() {
                             <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary rounded-full" onClick={() => handleViewPdf(inv.id)}>
                              {actionLoadingId === inv.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Eye className="w-4 h-4" />}
                             </Button>
-                            <Link href={`/invoices/${inv.id}`}>
-                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full"><Pencil className="w-4 h-4" /></Button>
-                            </Link>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 rounded-full"><MoreHorizontal className="w-4 h-4" /></Button></DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleDownloadPdf(inv.id, inv.invoice_number)}>Download PDF</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleSendEmail(inv)}>Send Email</DropdownMenuItem>
-                                
-                                {/* TRIGGER THE NEW PAYMENT DIALOG */}
-                                <DropdownMenuItem onClick={() => setSelectedInvoiceForPayment(inv)}> Mark Paid </DropdownMenuItem>
-                                
-                                <DropdownMenuItem onClick={() => handleStatusChange(inv.id, 'SHARED')}>Mark Shared</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleStatusChange(inv.id, 'DRAFT')}>Mark Draft</DropdownMenuItem>
-                                <DropdownMenuItem className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/10" onClick={() => handleDelete(inv.id)}> Delete </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            {canEdit && (
+                              <Link href={`/invoices/${inv.id}`}>
+                               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" title="Edit Invoice"><Pencil className="w-4 h-4" /></Button>
+                              </Link>
+                            )}
+                            
+                            {(canEdit || canDelete || canEmail) && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 rounded-full"><MoreHorizontal className="w-4 h-4" /></Button></DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleDownloadPdf(inv.id, inv.invoice_number)}>Download PDF</DropdownMenuItem>
+
+                                  {canEmail && (
+                                    <DropdownMenuItem onClick={() => handleSendEmail(inv)}>Send Email</DropdownMenuItem>
+                                  )}
+                                  
+                                  {canEdit && (
+                                    <>
+                                      <DropdownMenuItem onClick={() => setSelectedInvoiceForPayment(inv)}>Mark Paid</DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleStatusChange(inv.id, 'SHARED')}>Mark Shared</DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleStatusChange(inv.id, 'DRAFT')}>Mark Draft</DropdownMenuItem>
+                                    </>
+                                  )}
+
+                                  {canDelete && (
+                                    <DropdownMenuItem className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/10" onClick={() => handleDelete(inv.id)}>Delete</DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
                         </div>
                     </TableCell>
                   </TableRow>

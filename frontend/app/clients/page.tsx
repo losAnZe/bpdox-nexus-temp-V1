@@ -15,6 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from "@/components/ui/select";
 import { useRouter } from 'next/navigation';
+import { usePermissions } from "@/hooks/use-permissions";
 
 // --- Static Map for Indian States (GST Codes) ---
 const STATE_MAP: Record<number, string> = {
@@ -31,6 +32,12 @@ const STATE_MAP: Record<number, string> = {
 
 export default function ClientListPage() {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
+  
+  const canCreate = hasPermission('clients', 'create');
+  const canEdit = hasPermission('clients', 'edit');
+  const canDelete = hasPermission('clients', 'delete');
+
   const [clients, setClients] = useState<any[]>([]);
   const [filteredClients, setFilteredClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,11 +121,13 @@ export default function ClientListPage() {
           <h1 className="text-3xl font-bold text-foreground">Clients</h1>
           <p className="text-muted-foreground">Manage your customer database</p>
         </div>
-        <Link href="/clients/new">
-          <Button className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25">
-            <Plus className="w-4 h-4 mr-2" /> Add Client
-          </Button>
-        </Link>
+        {canCreate && (
+          <Link href="/clients/new">
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25">
+              <Plus className="w-4 h-4 mr-2" /> Add Client
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Filters Bar */}
@@ -195,21 +204,27 @@ export default function ClientListPage() {
                         </div>
                     </TableCell>
                     <TableCell className="text-right">
-                       <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted rounded-full">
-                                <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => router.push(`/clients/${client.id}`)}>
-                                Edit Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600 focus:text-red-600 focus:bg-red-50" onClick={() => handleDelete(client.id)}>
-                                Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                       </DropdownMenu>
+                       {(canEdit || canDelete) && (
+                         <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted rounded-full">
+                                  <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {canEdit && (
+                                <DropdownMenuItem onClick={() => router.push(`/clients/${client.id}`)}>
+                                    Edit Details
+                                </DropdownMenuItem>
+                              )}
+                              {canDelete && (
+                                <DropdownMenuItem className="text-red-600 focus:text-red-600 focus:bg-red-50" onClick={() => handleDelete(client.id)}>
+                                    Delete
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                         </DropdownMenu>
+                       )}
                     </TableCell>
                   </TableRow>
                 ))}

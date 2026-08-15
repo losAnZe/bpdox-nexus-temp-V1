@@ -21,9 +21,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Token expired or invalid -> Redirect to login
+      // Token expired or invalid -> Clear session & Redirect to login
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         window.location.href = '/login';
       }
     }

@@ -1,8 +1,7 @@
-// backend/routes/dashboardRoutes.ts
-
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { format } from 'date-fns';
+import { checkPermission } from '../middleware/authMiddleware';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -16,7 +15,7 @@ const getFinancialYear = (date: Date) => {
     return `FY ${startYear}-${endYear.toString().slice(-2)}`;
 };
 
-router.get('/stats', async (req: Request, res: Response) => {
+router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, res: Response) => {
   try {
     const { from, to, years, sections } = req.query;
     

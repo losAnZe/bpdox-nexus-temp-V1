@@ -28,6 +28,7 @@ import activityRoutes from './routes/activityRoutes';
 import incomeRoutes from './routes/incomeRoutes';
 import assetRoutes from './routes/assetRoutes';
 import updateRoutes from './routes/updateRoutes';
+import vaultRoutes from './routes/vaultRoutes';
 import { ActivityService } from './services/ActivityService';
 import { ReminderService } from './services/ReminderService';
 
@@ -94,6 +95,7 @@ app.use('/api/activity', activityRoutes);
 app.use('/api/income', incomeRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/update', updateRoutes);
+app.use('/api/vault', vaultRoutes);
 
 // 5. Start Server
 app.listen(PORT, () => {

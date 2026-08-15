@@ -24,11 +24,12 @@ export class BackupService {
         // Users (Careful with this, but needed for full restore)
         const users = await prisma.user.findMany();
 
-        // Client Assets
+        // Client Assets & Credentials
         const clientAssets = await prisma.clientAsset.findMany();
+        const clientCredentials = await prisma.clientCredential.findMany();
 
         const backupData = {
-          version: "2.1", // Bumped version for client assets
+          version: "2.2", // Bumped version for client credentials
           timestamp: new Date().toISOString(),
           data: {
             clients,
@@ -40,7 +41,8 @@ export class BackupService {
             invoiceSequences,
             quotationSequences,
             users,
-            clientAssets
+            clientAssets,
+            clientCredentials
           }
         };
 
@@ -209,6 +211,36 @@ export class BackupService {
               notes: a.notes,
               attachments: a.attachments,
               reminders_sent: a.reminders_sent
+            }
+          });
+        }
+      }
+
+      // G. Client Credentials
+      if (parsed.data.clientCredentials) {
+        for (const cred of parsed.data.clientCredentials) {
+          await tx.clientCredential.upsert({
+            where: { id: cred.id },
+            update: {
+              client_id: cred.client_id,
+              title: cred.title,
+              category: cred.category,
+              url: cred.url,
+              username: cred.username,
+              password: cred.password,
+              port: cred.port,
+              notes: cred.notes
+            },
+            create: {
+              id: cred.id,
+              client_id: cred.client_id,
+              title: cred.title,
+              category: cred.category,
+              url: cred.url,
+              username: cred.username,
+              password: cred.password,
+              port: cred.port,
+              notes: cred.notes
             }
           });
         }

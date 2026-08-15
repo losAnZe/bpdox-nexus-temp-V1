@@ -17,6 +17,7 @@ import {
 import { format, isWithinInterval, startOfDay, endOfDay, addDays } from "date-fns";
 import { useToast } from "@/components/ui/toast-context";
 import { useRole } from "@/hooks/use-role";
+import { usePermissions } from "@/hooks/use-permissions";
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend
 } from "recharts";
@@ -65,6 +66,12 @@ interface ClientAsset {
 export default function ClientAssetsPage() {
   const { toast } = useToast();
   const { isAdmin } = useRole();
+  const { hasPermission } = usePermissions();
+
+  const canCreate = hasPermission('assets', 'create');
+  const canEdit = hasPermission('assets', 'edit');
+  const canDelete = hasPermission('assets', 'delete');
+
   const [assets, setAssets] = useState<ClientAsset[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -498,7 +505,7 @@ export default function ClientAssetsPage() {
         head: [["S.No", "Client", "Asset Name", "Type", "Provider", "Expiry Date", "Renewal Cost", "Billing", "Status"]],
         body: tableData,
         theme: "striped",
-        headStyles: { fillContext: "#3A6EF3", fillColor: [58, 110, 243] },
+        headStyles: { fillColor: [58, 110, 243] },
         styles: { fontSize: 8, font: "helvetica" }
       });
 
@@ -520,9 +527,11 @@ export default function ClientAssetsPage() {
           <h1 className="text-3xl font-bold text-foreground">Client Assets</h1>
           <p className="text-muted-foreground font-medium">Manage and monitor recurring services like Domains, Web Hosting, and VPS subscriptions.</p>
         </div>
-        <Button onClick={openCreateForm} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25">
-          <Plus className="w-4 h-4 mr-2" /> Add New Asset
-        </Button>
+        {canCreate && (
+          <Button onClick={openCreateForm} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25">
+            <Plus className="w-4 h-4 mr-2" /> Add New Asset
+          </Button>
+        )}
       </div>
 
       {/* OVERVIEW METRICS */}
@@ -725,14 +734,16 @@ export default function ClientAssetsPage() {
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary rounded-full" onClick={() => viewAssetDetails(asset)}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary rounded-full" onClick={() => viewAssetDetails(asset)} title="View Details">
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary rounded-full" onClick={(e) => openEditForm(asset, e)}>
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          {isAdmin && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-full" onClick={(e) => handleDeleteAsset(asset.id, e)}>
+                          {canEdit && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary rounded-full" onClick={(e) => openEditForm(asset, e)} title="Edit Asset">
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-full" onClick={(e) => handleDeleteAsset(asset.id, e)} title="Delete Asset">
                               <Trash className="w-4 h-4" />
                             </Button>
                           )}

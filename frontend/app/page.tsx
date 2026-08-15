@@ -23,6 +23,8 @@ import {
   startOfWeek, endOfWeek, subWeeks, startOfMonth, endOfMonth, 
   subMonths, startOfQuarter, endOfQuarter, startOfYear, endOfYear
 } from "date-fns";
+import { useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/use-permissions";
 
 // --- DATE HELPERS ---
 
@@ -131,6 +133,10 @@ const parseFlexibleDate = (dateStr: string) => {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { hasPermission, loading: permsLoading } = usePermissions();
+  const canViewDashboard = hasPermission('dashboard', 'view');
+
   const [mounted, setMounted] = useState(false);
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
@@ -155,6 +161,21 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [loadingStats, setLoadingStats] = useState(false);
 
+  // Auto-redirect if Dashboard permission is unchecked
+  useEffect(() => {
+    if (!permsLoading && !canViewDashboard) {
+      if (hasPermission('invoices', 'view')) router.replace('/invoices');
+      else if (hasPermission('quotations', 'view')) router.replace('/quotations');
+      else if (hasPermission('clients', 'view')) router.replace('/clients');
+      else if (hasPermission('assets', 'view')) router.replace('/assets');
+      else if (hasPermission('vault', 'view')) router.replace('/vault');
+      else if (hasPermission('expenses', 'view')) router.replace('/expenses');
+      else if (hasPermission('reports', 'view')) router.replace('/ledger');
+      else if (hasPermission('activity', 'view')) router.replace('/activity');
+      else if (hasPermission('settings', 'view')) router.replace('/settings');
+    }
+  }, [permsLoading, canViewDashboard, hasPermission, router]);
+
   // Hydration fix
   useEffect(() => {
     setMounted(true);
@@ -162,6 +183,8 @@ export default function DashboardPage() {
 
   // --- INITIAL LOAD ---
   useEffect(() => {
+    if (permsLoading || !canViewDashboard) return;
+
     const fetchInit = async () => {
         try {
             const dates = getOverviewDates(overviewFilter, dateRange);
@@ -195,7 +218,7 @@ export default function DashboardPage() {
         }
     };
     fetchInit();
-  }, []);
+  }, [permsLoading, canViewDashboard]);
 
   // --- GLOBAL FILTER HANDLER ---
   const handleFilterChange = async (filter: string, range?: DateRange) => {

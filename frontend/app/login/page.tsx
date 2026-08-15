@@ -56,7 +56,36 @@ export default function LoginPage() {
       if (res.data.token) {
           localStorage.setItem('token', res.data.token);
           localStorage.setItem('user', JSON.stringify(res.data.user));
-          router.push('/');
+
+          const user = res.data.user;
+          const permissions = user?.permissions || {};
+          const isSudo = user?.role === 'SUDO_ADMIN';
+          const isAdmin = user?.role === 'ADMIN' || isSudo;
+
+          const hasPerm = (mod: string) => {
+            if (isSudo) return true;
+            if (isAdmin && !['vault', 'settings', 'team', 'activity'].includes(mod)) return true;
+            if (permissions && permissions[mod] !== undefined) {
+              return Array.isArray(permissions[mod]) && permissions[mod].includes('view');
+            }
+            if (mod === 'dashboard') return true;
+            return false;
+          };
+
+          let targetRoute = '/';
+          if (!hasPerm('dashboard')) {
+            if (hasPerm('invoices')) targetRoute = '/invoices';
+            else if (hasPerm('quotations')) targetRoute = '/quotations';
+            else if (hasPerm('clients')) targetRoute = '/clients';
+            else if (hasPerm('assets')) targetRoute = '/assets';
+            else if (hasPerm('vault')) targetRoute = '/vault';
+            else if (hasPerm('expenses')) targetRoute = '/expenses';
+            else if (hasPerm('reports')) targetRoute = '/ledger';
+            else if (hasPerm('activity')) targetRoute = '/activity';
+            else if (hasPerm('settings')) targetRoute = '/settings';
+          }
+
+          router.push(targetRoute);
       }
       
     } catch (err: any) {

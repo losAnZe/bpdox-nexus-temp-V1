@@ -50,6 +50,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
                 const token = localStorage.getItem('token');
                 if (!token && !isAuthPage) {
+                    localStorage.removeItem('user');
                     router.replace('/login');
                     return;
                 }

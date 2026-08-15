@@ -120,7 +120,13 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     res.json({ 
       token, 
-      user: { id: user.id, email: user.email, role: user.role, two_factor_enabled: user.two_factor_enabled } 
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        permissions: user.permissions,
+        two_factor_enabled: user.two_factor_enabled
+      } 
     });
 
   } catch (error) {

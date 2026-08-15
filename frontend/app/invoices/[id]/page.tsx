@@ -14,10 +14,12 @@ import { InvoiceItemsTable } from "../new/invoice-items";
 import api from "@/lib/api"; 
 import Link from "next/link";
 import { useRouter, useParams } from 'next/navigation';
+import { useToast } from "@/components/ui/toast-context";
 
 export default function EditInvoicePage() {
   const router = useRouter();
   const params = useParams();
+  const { toast } = useToast();
   const id = params.id;
 
   const [loading, setLoading] = useState(true);
@@ -133,7 +135,7 @@ export default function EditInvoicePage() {
     try {
         await api.put(`/invoices/${id}`, {
             clientId: Number(selectedClientId),
-            bankAccountId: Number(selectedBankId),
+            bankAccountId: selectedBankId ? Number(selectedBankId) : null,
             issueDate: issueDate?.toISOString(),
             dueDate: dueDate?.toISOString(),
             items,
@@ -143,10 +145,10 @@ export default function EditInvoicePage() {
             remarks,
             currency
         });
-        alert("Invoice Updated Successfully");
+        toast("Invoice Updated Successfully", "success");
         router.push('/invoices');
     } catch (e: any) {
-        alert(e.response?.data?.error || "Update failed");
+        toast(e.response?.data?.error || "Update failed", "error");
     } finally {
         setIsSaving(false);
     }

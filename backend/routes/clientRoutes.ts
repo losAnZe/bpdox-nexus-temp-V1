@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { AuthRequest, checkPermission } from '../middleware/authMiddleware';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // GET: List all clients
-router.get('/', async (req, res) => {
+router.get('/', checkPermission('clients', 'view'), async (req, res) => {
   try {
     const clients = await prisma.client.findMany({
       orderBy: { company_name: 'asc' }
@@ -17,7 +18,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET: Single Client
-router.get('/:id', async (req, res) => {
+router.get('/:id', checkPermission('clients', 'view'), async (req, res) => {
   try {
     const client = await prisma.client.findUnique({
       where: { id: Number(req.params.id) }
@@ -30,12 +31,12 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST: Create a new client
-router.post('/', async (req, res) => {
+router.post('/', checkPermission('clients', 'create'), async (req, res) => {
   try {
     const { 
       company_name, 
       tax_id, 
-      cin, // <--- Added CIN
+      cin, 
       state_code, 
       country, 
       email, 
@@ -49,7 +50,7 @@ router.post('/', async (req, res) => {
       data: {
         company_name,
         tax_id,
-        cin, // <--- Mapped to DB
+        cin,
         state_code: Number(state_code),
         country: country || 'India',
         email,
@@ -68,13 +69,13 @@ router.post('/', async (req, res) => {
 });
 
 // PUT: Update Client
-router.put('/:id', async (req, res) => {
+router.put('/:id', checkPermission('clients', 'edit'), async (req, res) => {
   try {
     const id = Number(req.params.id);
     const { 
       company_name, 
       tax_id, 
-      cin, // <--- Added CIN
+      cin, 
       state_code, 
       country, 
       email, 
@@ -89,7 +90,7 @@ router.put('/:id', async (req, res) => {
       data: {
         company_name,
         tax_id,
-        cin, // <--- Mapped to DB
+        cin,
         state_code: Number(state_code),
         country,
         email,
@@ -108,7 +109,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE: Remove Client
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', checkPermission('clients', 'delete'), async (req, res) => {
   try {
     const id = Number(req.params.id);
     await prisma.client.delete({ where: { id } });

@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { InvoiceService } from '../services/InvoiceService';
 import { PdfService } from '../services/PdfService';
 import { ActivityService } from '../services/ActivityService';
-import { AuthRequest, authorize } from '../middleware/authMiddleware';
+import { AuthRequest, authorize, checkPermission } from '../middleware/authMiddleware';
 import { PrismaClient } from '@prisma/client';
 
 const router = Router();
@@ -35,13 +35,13 @@ router.post('/calculate-tax', async (req, res) => {
 });
 
 // Get All Invoices
-router.get('/', async (req, res) => {
+router.get('/', checkPermission('invoices', 'view'), async (req, res) => {
   const invoices = await InvoiceService.getAllInvoices();
   res.json(invoices);
 });
 
 // Create Invoice
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', checkPermission('invoices', 'create'), async (req: Request, res: Response) => {
   try {
     const invoice = await InvoiceService.createInvoice(req.body);
     const authReq = req as AuthRequest;
@@ -167,17 +167,32 @@ router.get('/:id', async (req, res) => {
 });
 
 // Update Invoice Details
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', checkPermission('invoices', 'edit'), async (req: Request, res: Response) => {
   try {
     const invoice = await InvoiceService.updateInvoice(Number(req.params.id), req.body);
+    
+    const authReq = req as AuthRequest;
+    if (authReq.user) {
+      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+      await ActivityService.log(
+        authReq.user.id,
+        "UPDATE_INVOICE",
+        `Updated Invoice #${invoice.invoice_number}`,
+        "INVOICE",
+        invoice.id.toString(),
+        ip as string
+      );
+    }
+
     res.json(invoice);
-  } catch (e) {
-    res.status(500).json({ error: "Failed to update invoice" });
+  } catch (e: any) {
+    console.error("Update Invoice Error:", e);
+    res.status(400).json({ error: e.message || "Failed to update invoice" });
   }
 });
 
 // Delete Invoice
-router.delete('/:id', authorize(['SUDO_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+router.delete('/:id', checkPermission('invoices', 'delete'), async (req: Request, res: Response) => {
   try {
     await InvoiceService.deleteInvoice(Number(req.params.id));
     res.json({ success: true });

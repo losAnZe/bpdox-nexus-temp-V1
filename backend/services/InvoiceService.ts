@@ -227,11 +227,15 @@ export class InvoiceService {
           storageDueDate = this.getISTDateForStorage(new Date(data.dueDate));
       }
 
+      const validBankId = (data.bankAccountId && !isNaN(Number(data.bankAccountId)) && Number(data.bankAccountId) > 0)
+        ? Number(data.bankAccountId) 
+        : null;
+
       // C. DATABASE INSERTION
       return await tx.invoice.create({
         data: {
           invoice_number: invoiceNumber!,
-          client_id: data.clientId,
+          client_id: Number(data.clientId),
           // Use the Normalized Date (00:00 UTC of the IST Day)
           issue_date: storageDate, 
           due_date: storageDueDate,
@@ -243,7 +247,7 @@ export class InvoiceService {
           grand_total: new Prisma.Decimal(data.grandTotal),
           is_manual_entry: data.isManual,
           remarks: data.remarks,
-          bank_account_id: data.bankAccountId,
+          bank_account_id: validBankId,
           currency: data.currency || 'INR',
         }
       });
@@ -270,19 +274,23 @@ export class InvoiceService {
             storageDueDate = this.getISTDateForStorage(new Date(data.dueDate));
         }
 
+        const validBankId = (data.bankAccountId && !isNaN(Number(data.bankAccountId)) && Number(data.bankAccountId) > 0)
+          ? Number(data.bankAccountId)
+          : null;
+
         return await tx.invoice.update({
             where: { id },
             data: {
-                client_id: data.clientId,
-                bank_account_id: data.bankAccountId,
-                issue_date: storageDate, // Fixed
-                due_date: storageDueDate, // Fixed
+                client_id: Number(data.clientId),
+                bank_account_id: validBankId,
+                issue_date: storageDate,
+                due_date: storageDueDate,
                 line_items: data.items as unknown as Prisma.InputJsonValue,
                 tax_summary: data.taxSummary as unknown as Prisma.InputJsonValue,
                 subtotal: new Prisma.Decimal(data.subtotal),
                 grand_total: new Prisma.Decimal(data.grandTotal),
                 remarks: data.remarks,
-                currency: data.currency,
+                currency: data.currency || 'INR',
             }
         });
     });

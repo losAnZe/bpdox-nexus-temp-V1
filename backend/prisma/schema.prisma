@@ -36,6 +36,7 @@ model User {
   activities         ActivityLog[]
 
   created_at         DateTime @default(now())
+  permissions        Json?    // Module-level permission matrix for IAM
 }
 
 model ActivityLog {
@@ -96,6 +97,7 @@ model Client {
   invoices        Invoice[]
   quotations      Quotation[]
   assets          ClientAsset[]
+  credentials     ClientCredential[]
 }
 
 model BankAccount {
@@ -287,4 +289,27 @@ model ClientAsset {
   updated_at      DateTime @updatedAt
 
   @@map("ClientAsset")
+}
+
+// --------------------------------------
+// 6. CLIENT CREDENTIAL VAULT (AES-256 ENCRYPTED)
+// --------------------------------------
+
+model ClientCredential {
+  id          Int      @id @default(autoincrement())
+  client_id   Int
+  client      Client   @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  
+  title       String   // e.g. "Main Website Admin", "cPanel Production"
+  category    String   @default("Custom") // Hosting, Domain, CMS Admin, FTP/SSH, Cloudflare, Database, Custom
+  url         String?  // e.g. "https://clientdomain.com/wp-admin"
+  username    String
+  password    String   // Encrypted at rest (AES-256-GCM)
+  port        String?  // e.g. "22", "21", "3306"
+  notes       String?
+  
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@map("ClientCredential")
 }

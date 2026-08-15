@@ -51,3 +51,55 @@ export const authorize = (allowedRoles: string[]) => {
     next();
   };
 };
+
+// Granular IAM Permission Middleware
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
+
+export const checkPermission = (moduleName: string, action: string = 'view') => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const authReq = req as AuthRequest;
+    
+    if (!authReq.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    // SUDO_ADMIN has bypass access to all modules
+    if (authReq.user.role === 'SUDO_ADMIN') {
+      return next();
+    }
+
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: authReq.user.id },
+        select: { role: true, permissions: true }
+      });
+
+      if (!user) {
+        res.status(401).json({ error: "User not found" });
+        return;
+      }
+
+      if (user.role === 'SUDO_ADMIN') {
+        return next();
+      }
+
+      const permissions = (user.permissions as any) || {};
+      const modulePermissions = permissions[moduleName] || [];
+
+      // Check if action (view, create, edit, delete, email, etc.) is allowed
+      if (Array.isArray(modulePermissions) && modulePermissions.includes(action)) {
+        return next();
+      }
+
+      res.status(403).json({ 
+        error: `Access Denied: You do not have '${action}' permission for ${moduleName}.` 
+      });
+      return;
+    } catch (err) {
+      res.status(500).json({ error: "Permission validation failed" });
+      return;
+    }
+  };
+};

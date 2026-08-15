@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import sanitizeHtml from 'sanitize-html';
 import { ActivityService } from '../services/ActivityService';
-import { AuthRequest, authorize } from '../middleware/authMiddleware';
+import { AuthRequest, authorize, checkPermission } from '../middleware/authMiddleware';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
 // ==============================
 // 1. COMPANY PROFILE
 // ==============================
-router.get('/company', authorize(['SUDO_ADMIN', 'ADMIN']), async (req, res) => {
+router.get('/company', checkPermission('settings', 'view'), async (req, res) => {
   const setting = await prisma.systemSetting.findUnique({ where: { key: 'COMPANY_PROFILE' } });
   res.json(setting?.json_value || {});
 });
@@ -45,7 +45,7 @@ router.put('/company', authorize(['SUDO_ADMIN']), async (req: Request, res: Resp
 // ==============================
 // 2. DOCUMENT SETTINGS
 // ==============================
-router.get('/documents', authorize(['SUDO_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+router.get('/documents', checkPermission('settings', 'view'), async (req: Request, res: Response) => {
   const setting = await prisma.systemSetting.findUnique({ where: { key: 'DOCUMENT_SETTINGS' } });
   res.json(setting?.json_value || { invoice_format: "INV/{FY}/{SEQ:3}", quotation_format: "QTN/{FY}/{SEQ:3}", invoice_label: "INVOICE", quotation_label: "QUOTATION" });
 });
@@ -138,7 +138,7 @@ router.post('/template', authorize(['SUDO_ADMIN']), async (req: Request, res: Re
   }
 });
 
-router.get('/template/:type', authorize(['SUDO_ADMIN', 'ADMIN']), async (req, res) => {
+router.get('/template/:type', checkPermission('settings', 'view'), async (req, res) => {
   const key = req.params.type === 'QUOTATION' ? 'QUOTATION_TEMPLATE' : 'INVOICE_TEMPLATE';
   const setting = await prisma.systemSetting.findUnique({ where: { key } });
   res.json({ html: setting?.value || '' });

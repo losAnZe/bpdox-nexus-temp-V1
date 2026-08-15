@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import { AVAILABLE_CURRENCIES } from "@/lib/currencies"; // Import currency helper
+import { usePermissions } from "@/hooks/use-permissions";
 
 // Types
 interface QuoteItem {
@@ -54,6 +55,12 @@ interface Quotation {
 }
 
 export default function QuotationListPage() {
+  const { hasPermission } = usePermissions();
+  
+  const canCreate = hasPermission('quotations', 'create');
+  const canEdit = hasPermission('quotations', 'edit');
+  const canDelete = hasPermission('quotations', 'delete');
+
   const [quotes, setQuotes] = useState<Quotation[]>([]);
   const [filteredQuotes, setFilteredQuotes] = useState<Quotation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,12 +212,13 @@ export default function QuotationListPage() {
           <p className="text-muted-foreground">Manage estimates and proposals</p>
         </div>
         
-        {/* REDIRECTS TO NEW PAGE */}
-        <Link href="/quotations/new">
-            <Button className="bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90">
-                <Plus className="w-4 h-4 mr-2" /> Create Quote
-            </Button>
-        </Link>
+        {canCreate && (
+          <Link href="/quotations/new">
+              <Button className="bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90">
+                  <Plus className="w-4 h-4 mr-2" /> Create Quote
+              </Button>
+          </Link>
+        )}
       </div>
 
       {/* FILTERS BAR */}
@@ -320,15 +328,19 @@ export default function QuotationListPage() {
                           </Button>
                           
                           {/* Edit Page Link */}
-                          <Link href={`/quotations/${q.id}`}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-blue-500 rounded-full" title="Edit">
-                                <Pencil className="w-4 h-4"/>
-                            </Button>
-                          </Link>
+                          {canEdit && (
+                            <Link href={`/quotations/${q.id}`}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-blue-500 rounded-full" title="Edit">
+                                  <Pencil className="w-4 h-4"/>
+                              </Button>
+                            </Link>
+                          )}
                           
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-red-500 rounded-full" onClick={() => handleDelete(q.id)} title="Delete">
-                              <Trash2 className="w-4 h-4"/>
-                          </Button>
+                          {canDelete && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-red-500 rounded-full" onClick={() => handleDelete(q.id)} title="Delete">
+                                <Trash2 className="w-4 h-4"/>
+                            </Button>
+                          )}
                        </div>
                     </TableCell>
                   </TableRow>

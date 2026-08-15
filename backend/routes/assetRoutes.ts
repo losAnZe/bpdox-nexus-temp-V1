@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
-import { AuthRequest, authorize } from '../middleware/authMiddleware';
+import { AuthRequest, authorize, checkPermission } from '../middleware/authMiddleware';
 import { ActivityService } from '../services/ActivityService';
 import { ReminderService } from '../services/ReminderService';
 
@@ -10,28 +10,24 @@ const prisma = new PrismaClient();
 // ==========================================
 // 1. GET ALL ASSETS (with Search & Filters)
 // ==========================================
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', checkPermission('assets', 'view'), async (req: Request, res: Response) => {
   try {
     const { client_id, asset_type, status, search } = req.query;
 
     const where: Prisma.ClientAssetWhereInput = {};
 
-    // Filter by Client
     if (client_id) {
       where.client_id = Number(client_id);
     }
 
-    // Filter by Asset Type
     if (asset_type && asset_type !== 'ALL') {
       where.asset_type = asset_type as string;
     }
 
-    // Filter by Status
     if (status && status !== 'ALL') {
       where.status = status as string;
     }
 
-    // Search Term (Asset Name, Provider, Client Company Name)
     if (search) {
       const searchStr = search as string;
       where.OR = [
@@ -65,7 +61,7 @@ router.get('/', async (req: Request, res: Response) => {
 // ==========================================
 // 2. GET SINGLE ASSET
 // ==========================================
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', checkPermission('assets', 'view'), async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
@@ -89,7 +85,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 // ==========================================
 // 3. CREATE ASSET
 // ==========================================
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', checkPermission('assets', 'create'), async (req: Request, res: Response) => {
   try {
     const {
       client_id,
@@ -112,7 +108,6 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Auto-calculate status if not set to INACTIVE
     let finalStatus = status || "ACTIVE";
     if (finalStatus !== 'INACTIVE') {
       const today = new Date();
@@ -150,7 +145,6 @@ router.post('/', async (req: Request, res: Response) => {
       }
     });
 
-    // Log Activity
     const authReq = req as AuthRequest;
     if (authReq.user) {
       const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -164,7 +158,6 @@ router.post('/', async (req: Request, res: Response) => {
       );
     }
 
-    // Instantly check & send alerts if milestone or expiry applies
     ReminderService.checkSingleAssetReminder(newAsset.id).catch(err => {
       console.error("[assetRoutes] Error in instant reminder check:", err);
     });
@@ -179,7 +172,7 @@ router.post('/', async (req: Request, res: Response) => {
 // ==========================================
 // 4. UPDATE ASSET
 // ==========================================
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', checkPermission('assets', 'edit'), async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
@@ -201,7 +194,6 @@ router.put('/:id', async (req: Request, res: Response) => {
       attachments
     } = req.body;
 
-    // Reset reminders if expiry date is changed
     const existing = await prisma.clientAsset.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "Asset not found" });
 
@@ -210,11 +202,9 @@ router.put('/:id', async (req: Request, res: Response) => {
     const newExpiry = expiry_date ? new Date(expiry_date).getTime() : oldExpiry;
     
     if (oldExpiry !== newExpiry) {
-      // Clear sent reminders if the expiry date is extended/changed
       updatedReminders = [];
     }
 
-    // Auto-calculate status if not set to INACTIVE
     let finalStatus = status !== undefined ? status : existing.status;
     if (finalStatus !== 'INACTIVE') {
       const targetExpiry = expiry_date ? new Date(expiry_date) : new Date(existing.expiry_date);
@@ -253,7 +243,6 @@ router.put('/:id', async (req: Request, res: Response) => {
       }
     });
 
-    // Log Activity
     const authReq = req as AuthRequest;
     if (authReq.user) {
       const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -267,7 +256,6 @@ router.put('/:id', async (req: Request, res: Response) => {
       );
     }
 
-    // Instantly check & send alerts if milestone or expiry applies
     ReminderService.checkSingleAssetReminder(updated.id).catch(err => {
       console.error("[assetRoutes] Error in instant reminder check:", err);
     });
@@ -282,7 +270,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 // ==========================================
 // 5. DELETE ASSET
 // ==========================================
-router.delete('/:id', authorize(['SUDO_ADMIN', 'ADMIN']), async (req: Request, res: Response) => {
+router.delete('/:id', checkPermission('assets', 'delete'), async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
@@ -291,7 +279,6 @@ router.delete('/:id', authorize(['SUDO_ADMIN', 'ADMIN']), async (req: Request, r
       where: { id }
     });
 
-    // Log Activity
     const authReq = req as AuthRequest;
     if (authReq.user) {
       const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;

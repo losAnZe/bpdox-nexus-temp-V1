@@ -12,8 +12,9 @@ export function useRole() {
       if (typeof window === 'undefined') return null;
       
       try {
+        const token = localStorage.getItem('token');
         const userStr = localStorage.getItem('user');
-        if (!userStr) return null;
+        if (!token || !userStr) return null;
         
         const user = JSON.parse(userStr);
         return user.role || null;
