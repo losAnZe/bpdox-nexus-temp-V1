@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Trash2, Loader2, ShieldAlert, UserPlus, Key, CheckSquare, Square, ShieldCheck } from "lucide-react";
+import { Trash2, Loader2, ShieldAlert, UserPlus, Key, CheckSquare, Square, ShieldCheck, KeyRound } from "lucide-react";
 import { useToast } from "@/components/ui/toast-context";
 import { useRole } from "@/hooks/use-role";
 
@@ -43,6 +43,13 @@ export function TeamSettings({ disabled }: TeamSettingsProps) {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [userPerms, setUserPerms] = useState<{ [key: string]: string[] }>({});
   const [savingPerms, setSavingPerms] = useState(false);
+
+  // Reset Password Modal State
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetUser, setResetUser] = useState<any>(null);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [savingReset, setSavingReset] = useState(false);
 
   // Load users on mount
   useEffect(() => {
@@ -146,6 +153,37 @@ export function TeamSettings({ disabled }: TeamSettingsProps) {
       toast(e.response?.data?.error || "Failed to update permissions", "error");
     } finally {
       setSavingPerms(false);
+    }
+  };
+
+  // Open Reset Credentials Modal
+  const openResetModal = (u: any) => {
+    setResetUser(u);
+    setResetEmail(u.email);
+    setResetPassword("");
+    setResetModalOpen(true);
+  };
+
+  // Submit Password Reset
+  const handleResetPassword = async () => {
+    if (!resetUser) return;
+    if (!resetPassword || resetPassword.trim().length < 4) {
+      return toast("New password must be at least 4 characters long", "warning");
+    }
+
+    setSavingReset(true);
+    try {
+      await api.put(`/users/${resetUser.id}/password`, {
+        email: resetEmail,
+        password: resetPassword
+      });
+      toast(`Credentials updated successfully for ${resetEmail}`, "success");
+      setResetModalOpen(false);
+      loadUsers();
+    } catch (e: any) {
+      toast(e.response?.data?.error || "Failed to reset password", "error");
+    } finally {
+      setSavingReset(false);
     }
   };
 
@@ -258,11 +296,28 @@ export function TeamSettings({ disabled }: TeamSettingsProps) {
                     </TableCell>
                     {canEdit && (
                       <TableCell className="text-right">
-                        {!isOwner && (
-                          <Button variant="ghost" size="icon" onClick={() => deleteUser(u.id)} className="hover:bg-red-50 hover:text-red-600 rounded-full">
-                            <Trash2 className="w-4 h-4"/>
+                        <div className="flex justify-end gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => openResetModal(u)} 
+                            className="hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-900/20 rounded-full"
+                            title="Reset User Password & Credentials"
+                          >
+                            <KeyRound className="w-4 h-4"/>
                           </Button>
-                        )}
+                          {!isOwner && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => deleteUser(u.id)} 
+                              className="hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 rounded-full"
+                              title="Delete User"
+                            >
+                              <Trash2 className="w-4 h-4"/>
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>
@@ -340,6 +395,49 @@ export function TeamSettings({ disabled }: TeamSettingsProps) {
               <Button onClick={savePermissions} disabled={savingPerms} className="bg-primary text-primary-foreground">
                 {savingPerms ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                 Save Permissions Matrix
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* RESET PASSWORD MODAL */}
+        <Dialog open={resetModalOpen} onOpenChange={setResetModalOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-amber-500" /> Reset Credentials for {resetUser?.email}
+              </DialogTitle>
+              <DialogDescription>
+                Update username (email) or set a new password for this user account.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 my-2">
+              <div className="space-y-2">
+                <Label>User Email / Username</Label>
+                <Input 
+                  value={resetEmail} 
+                  onChange={e => setResetEmail(e.target.value)} 
+                  placeholder="user@company.com" 
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>New Password</Label>
+                <Input 
+                  type="password" 
+                  value={resetPassword} 
+                  onChange={e => setResetPassword(e.target.value)} 
+                  placeholder="Enter new password (min 4 characters)" 
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="mt-4">
+              <Button variant="outline" onClick={() => setResetModalOpen(false)}>Cancel</Button>
+              <Button onClick={handleResetPassword} disabled={savingReset} className="bg-amber-500 hover:bg-amber-600 text-white">
+                {savingReset ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Update Credentials
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -123,6 +123,53 @@ router.put('/:id/permissions', authorize(['SUDO_ADMIN']), async (req: Request, r
   }
 });
 
+// PUT: Reset User Password (SUDO ONLY)
+router.put('/:id/password', authorize(['SUDO_ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const userId = Number(req.params.id);
+    const { password, email } = req.body;
+
+    if (!password || String(password).trim().length < 4) {
+      return res.status(400).json({ error: "New password must be at least 4 characters long." });
+    }
+
+    const target = await prisma.user.findUnique({ where: { id: userId } });
+    if (!target) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(password, salt);
+
+    const updateData: any = { password_hash: hash };
+    if (email && String(email).trim() !== '' && email !== target.email) {
+      updateData.email = String(email).trim();
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: { id: true, email: true, role: true }
+    });
+
+    const authReq = req as AuthRequest;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    await ActivityService.log(
+      authReq.user.id,
+      "RESET_PASSWORD",
+      `Reset password for user: ${updatedUser.email}`,
+      "USER",
+      userId.toString(),
+      ip as string
+    );
+
+    res.json({ success: true, message: `Password updated for ${updatedUser.email}` });
+  } catch (error: any) {
+    console.error("Reset Password Error:", error);
+    res.status(500).json({ error: error.message || "Failed to reset password" });
+  }
+});
+
 
 // DELETE: Remove User (SUDO ONLY)
 router.delete('/:id', authorize(['SUDO_ADMIN']), async (req: Request, res: Response) => {
