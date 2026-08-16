@@ -23,6 +23,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { formatMoneyWithCurrency } from "@/lib/currencies";
 import { 
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
@@ -121,11 +122,7 @@ export default function InvoiceListPage() {
 
   // --- Helper: Format Currency correctly ---
   const formatMoney = (amount: number, currency: string) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: currency || 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
+    return formatMoneyWithCurrency(amount, currency);
   };
 
   // --- 4. FILTERING LOGIC ---

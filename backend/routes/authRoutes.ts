@@ -102,11 +102,33 @@ router.post('/login', loginLimiter, async (req, res) => {
     if (!validPass) return res.status(400).json({ error: "Invalid password" });
 
     if (user.two_factor_enabled) {
-        if (!totpToken) return res.json({ require2fa: true }); 
-        if (!user.two_factor_secret) return res.status(500).json({ error: "2FA enabled but secret missing." });
+        const targetEmail = user.two_factor_email || user.email;
+        const masked = targetEmail.replace(/(.{2})(.*)(?=@)/, (gp1, gp2, gp3) => gp2 + "*".repeat(gp3.length));
+
+        if (!totpToken) {
+          return res.json({ require2fa: true, email: user.email, maskedEmail: masked }); 
+        }
         
-        const validTotp = authenticator.check(totpToken, user.two_factor_secret);
-        if (!validTotp) return res.status(400).json({ error: "Invalid 2FA Code" });
+        let isValidCode = false;
+        if (user.two_factor_secret) {
+          isValidCode = authenticator.check(totpToken, user.two_factor_secret);
+        }
+
+        // Fallback: Check Email OTP code
+        if (!isValidCode && user.email_otp_code && user.email_otp_expiry) {
+          const isEmailOtpMatch = user.email_otp_code.trim() === String(totpToken).trim();
+          const isNotExpired = new Date(user.email_otp_expiry).getTime() > Date.now();
+          if (isEmailOtpMatch && isNotExpired) {
+            isValidCode = true;
+            // Clear used OTP code
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { email_otp_code: null, email_otp_expiry: null }
+            });
+          }
+        }
+
+        if (!isValidCode) return res.status(400).json({ error: "Invalid 2FA Code or expired Email OTP" });
     }
 
     const token = jwt.sign(
@@ -132,6 +154,52 @@ router.post('/login', loginLimiter, async (req, res) => {
   } catch (error) {
     console.error("Login Error:", error);
     res.status(500).json({ error: "Login failed. System might need setup." });
+  }
+});
+
+// POST: Send 2FA OTP Code via Email
+router.post('/send-2fa-email', async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !user.two_factor_enabled) {
+      return res.status(400).json({ error: "Invalid request or 2FA not enabled for account." });
+    }
+
+    if (password) {
+      const validPass = await bcrypt.compare(password, user.password_hash);
+      if (!validPass) return res.status(400).json({ error: "Invalid credentials" });
+    }
+
+    const targetEmail = user.two_factor_email || user.email;
+
+    // Generate random 6-digit OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes valid
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        email_otp_code: otpCode,
+        email_otp_expiry: expiry
+      }
+    });
+
+    const maskedEmail = targetEmail.replace(/(.{2})(.*)(?=@)/, (gp1, gp2, gp3) => gp2 + "*".repeat(gp3.length));
+
+    // Send email using system SMTP
+    await sendEmail(
+      targetEmail,
+      "Your 2FA Verification Code - BPDox Nexus",
+      `Hello,\n\nYour Two-Factor Verification Code is: ${otpCode}\n\nThis code will expire in 10 minutes.\nIf you did not request this code, please secure your account immediately.\n\nBest regards,\nBPDox Nexus Security`
+    );
+
+    res.json({ success: true, message: `Verification code sent to ${maskedEmail}`, maskedEmail });
+  } catch (error: any) {
+    console.error("Send 2FA Email Error:", error);
+    res.status(500).json({ error: "Failed to send 2FA email. Please check system SMTP settings in Settings." });
   }
 });
 

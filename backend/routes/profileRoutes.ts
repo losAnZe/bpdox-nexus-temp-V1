@@ -12,13 +12,33 @@ router.get('/', async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
     const user = await prisma.user.findUnique({
       where: { id: authReq.user.id },
-      select: { id: true, email: true, role: true, permissions: true, two_factor_enabled: true }
+      select: { id: true, email: true, role: true, permissions: true, two_factor_enabled: true, two_factor_email: true }
     });
     
     if (!user) return res.status(404).json({ error: "User not found" });
     res.json(user);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch profile" });
+  }
+});
+
+// PUT: Update 2FA Backup Email
+router.put('/2fa-email', async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { two_factor_email } = req.body;
+    const cleanEmail = two_factor_email ? String(two_factor_email).trim() : null;
+
+    const updated = await prisma.user.update({
+      where: { id: authReq.user.id },
+      data: { two_factor_email: cleanEmail },
+      select: { id: true, email: true, two_factor_email: true }
+    });
+
+    res.json({ success: true, two_factor_email: updated.two_factor_email, message: "2FA backup email updated successfully" });
+  } catch (error: any) {
+    console.error("2FA Email Update Error:", error);
+    res.status(500).json({ error: "Failed to update 2FA backup email" });
   }
 });
 

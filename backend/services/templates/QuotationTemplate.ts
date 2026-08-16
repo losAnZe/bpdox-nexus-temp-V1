@@ -4,12 +4,29 @@ import path from 'path';
 export const generateQuotationHTML = (quotation: any, ownerProfile: any) => {
   const items = quotation.line_items;
 
+  const getCurrencySymbol = (code: string) => {
+    if (!code) return '₹';
+    const map: Record<string, string> = {
+      'AUD': 'AUD', 'AU$': 'AUD',
+      'SGD': 'SGD', 'S$': 'SGD', 'SG$': 'SGD',
+      'USD': 'US$', 'US$': 'US$',
+      'CAD': 'CAD', 'CA$': 'CAD',
+      'INR': '₹', '₹': '₹',
+      'EUR': '€', '€': '€',
+      'GBP': '£', '£': '£',
+      'AED': 'AED', 'JPY': '¥'
+    };
+    return map[code.toUpperCase()] || map[code] || code;
+  };
+
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: quotation.currency || 'INR',
-      minimumFractionDigits: 2
-    }).format(amount);
+    const val = Number(amount) || 0;
+    const numStr = new Intl.NumberFormat('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(val);
+    const symbol = getCurrencySymbol(quotation.currency || 'INR');
+    return `${symbol} ${numStr}`;
   };
 
   const getBase64Image = (webPath: string) => {

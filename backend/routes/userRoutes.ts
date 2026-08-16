@@ -171,6 +171,44 @@ router.put('/:id/password', authorize(['SUDO_ADMIN']), async (req: Request, res:
 });
 
 
+// PUT: Disable 2FA for User (SUDO ONLY)
+router.put('/:id/2fa/disable', authorize(['SUDO_ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const userId = Number(req.params.id);
+
+    const target = await prisma.user.findUnique({ where: { id: userId } });
+    if (!target) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        two_factor_enabled: false,
+        two_factor_secret: null,
+        backup_codes: []
+      },
+      select: { id: true, email: true, two_factor_enabled: true }
+    });
+
+    const authReq = req as AuthRequest;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    await ActivityService.log(
+      authReq.user.id,
+      "DISABLE_USER_2FA",
+      `Disabled 2FA for user: ${updatedUser.email}`,
+      "USER",
+      userId.toString(),
+      ip as string
+    );
+
+    res.json({ success: true, message: `2FA disabled for ${updatedUser.email}` });
+  } catch (error: any) {
+    console.error("Disable 2FA Error:", error);
+    res.status(500).json({ error: error.message || "Failed to disable 2FA" });
+  }
+});
+
 // DELETE: Remove User (SUDO ONLY)
 router.delete('/:id', authorize(['SUDO_ADMIN']), async (req: Request, res: Response) => {
   try {

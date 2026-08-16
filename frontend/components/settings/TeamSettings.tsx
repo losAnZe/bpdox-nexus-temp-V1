@@ -187,6 +187,20 @@ export function TeamSettings({ disabled }: TeamSettingsProps) {
     }
   };
 
+  // Disable 2FA for user (Sudo Admin only)
+  const handleDisable2FA = async (u: any) => {
+    if (!canEdit) return;
+    if (!confirm(`Are you sure you want to disable 2FA for ${u.email}? The user will be able to log in without 2FA verification.`)) return;
+
+    try {
+      await api.put(`/users/${u.id}/2fa/disable`);
+      toast(`2FA disabled for ${u.email}`, "success");
+      loadUsers();
+    } catch (e: any) {
+      toast(e.response?.data?.error || "Failed to disable 2FA", "error");
+    }
+  };
+
   const canEdit = isSudo && !disabled; 
 
   return (
@@ -286,10 +300,26 @@ export function TeamSettings({ disabled }: TeamSettingsProps) {
                       )}
                     </TableCell>
                     <TableCell>
-                      {u.two_factor_enabled 
-                        ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none">2FA Active</Badge> 
-                        : <span className="text-muted-foreground text-xs">Unsecured</span>
-                      }
+                      <div className="flex items-center gap-2">
+                        {u.two_factor_enabled ? (
+                          <>
+                            <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none">2FA Active</Badge>
+                            {canEdit && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[11px] px-2 text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200 font-medium"
+                                onClick={() => handleDisable2FA(u)}
+                                title="Disable 2FA for this user"
+                              >
+                                Disable 2FA
+                              </Button>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">Unsecured</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
                       {new Date(u.created_at).toLocaleDateString()}

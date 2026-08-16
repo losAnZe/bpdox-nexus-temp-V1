@@ -12,23 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast-context";
+import { AVAILABLE_CURRENCIES, getCurrencySymbol } from "@/lib/currencies";
 
 interface BankSettingsProps {
   disabled?: boolean;
 }
-
-// defined locally for portability, can be moved to @/lib/currencies.ts
-const AVAILABLE_CURRENCIES = [
-  { code: 'USD', name: 'US Dollar', symbol: 'US$' },
-  { code: 'CAD', name: 'Canadian Dollar', symbol: 'CA$' },
-  { code: 'AUD', name: 'Australian Dollar', symbol: 'AU$' },
-  { code: 'INR', name: 'Indian Rupee', symbol: '₹' },
-  { code: 'EUR', name: 'Euro', symbol: '€' },
-  { code: 'GBP', name: 'British Pound', symbol: '£' },
-  { code: 'SGD', name: 'Singapore Dollar', symbol: 'S$' },
-  { code: 'AED', name: 'UAE Dirham', symbol: 'AED' },
-  { code: 'JPY', name: 'Japanese Yen', symbol: '¥' },
-];
 
 export function BankSettings({ disabled }: BankSettingsProps) {
   const { toast } = useToast();
@@ -36,22 +24,33 @@ export function BankSettings({ disabled }: BankSettingsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<any>({});
+  const [isCustomCurrency, setIsCustomCurrency] = useState(false);
 
   useEffect(() => { loadBanks(); }, []);
   
   const loadBanks = () => api.get('/banks').then(res => setBanks(res.data));
 
-  const getCurrencySymbol = (code: string) => {
-    return AVAILABLE_CURRENCIES.find(c => c.code === code)?.symbol || code;
-  };
-
   const openDialog = (bank?: any) => {
     if (disabled) return;
     setEditingId(bank ? bank.id : null);
     
-    setForm(bank || { 
+    if (bank && bank.currency) {
+      const match = AVAILABLE_CURRENCIES.find(
+        c => c.code.toLowerCase() === bank.currency.toLowerCase() || c.symbol.toLowerCase() === bank.currency.toLowerCase()
+      );
+      if (match) {
+        setIsCustomCurrency(false);
+        setForm({ ...bank, currencySelect: match.code, customCurrency: '' });
+      } else {
+        setIsCustomCurrency(true);
+        setForm({ ...bank, currencySelect: 'CUSTOM', customCurrency: bank.currency });
+      }
+    } else {
+      setIsCustomCurrency(false);
+      setForm({ 
         label: '', 
-        currency: 'USD', 
+        currencySelect: 'USD',
+        customCurrency: '',
         is_default: false,
         bank_name: '',
         account_holder: '',
@@ -64,7 +63,8 @@ export function BankSettings({ disabled }: BankSettingsProps) {
         upi_id: '',
         branch_address: '',
         payment_method: '' 
-    });
+      });
+    }
     setIsOpen(true);
   };
 
@@ -72,10 +72,26 @@ export function BankSettings({ disabled }: BankSettingsProps) {
     if(!form.label || !form.account_number) {
         return toast("Missing required fields (Label & Account #)", "warning");
     }
+
+    const currencyToSave = isCustomCurrency 
+      ? (form.customCurrency || 'USD').trim()
+      : (form.currencySelect || 'USD');
+
+    if (isCustomCurrency && !currencyToSave) {
+      return toast("Please enter a custom currency code or symbol", "warning");
+    }
+
+    const payload = {
+      ...form,
+      currency: currencyToSave
+    };
+
+    delete payload.currencySelect;
+    delete payload.customCurrency;
     
     try {
-        if(editingId) await api.put(`/banks/${editingId}`, form);
-        else await api.post('/banks', form);
+        if(editingId) await api.put(`/banks/${editingId}`, payload);
+        else await api.post('/banks', payload);
         
         setIsOpen(false); 
         loadBanks();
@@ -113,7 +129,7 @@ export function BankSettings({ disabled }: BankSettingsProps) {
         <CardHeader className="flex flex-row items-center justify-between">
             <div>
                 <CardTitle>Bank Accounts</CardTitle>
-                <CardDescription>Manage multi-currency accounts for invoices.</CardDescription>
+                <CardDescription>Manage multi-currency accounts & custom currency symbols for invoices.</CardDescription>
             </div>
             {!disabled && (
                 <Button onClick={() => openDialog()} className="bg-primary text-primary-foreground">
@@ -131,7 +147,7 @@ export function BankSettings({ disabled }: BankSettingsProps) {
                                     <h4 className="font-bold text-base">{bank.label}</h4>
                                     {bank.is_default && <Badge>Default</Badge>}
                                     <Badge variant="outline" className="font-mono text-xs">
-                                        {getCurrencySymbol(bank.currency)}
+                                        {getCurrencySymbol(bank.currency)} ({bank.currency})
                                     </Badge>
                                 </div>
                                 
@@ -200,8 +216,16 @@ export function BankSettings({ disabled }: BankSettingsProps) {
                         <div className="space-y-2">
                             <Label>Currency</Label>
                             <Select 
-                                value={form.currency} 
-                                onValueChange={(val) => setForm({...form, currency: val})}
+                                value={isCustomCurrency ? 'CUSTOM' : (form.currencySelect || 'USD')} 
+                                onValueChange={(val) => {
+                                    if (val === 'CUSTOM') {
+                                        setIsCustomCurrency(true);
+                                        setForm({...form, currencySelect: 'CUSTOM'});
+                                    } else {
+                                        setIsCustomCurrency(false);
+                                        setForm({...form, currencySelect: val, customCurrency: ''});
+                                    }
+                                }}
                             >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select Currency" />
@@ -212,10 +236,26 @@ export function BankSettings({ disabled }: BankSettingsProps) {
                                             <span className="font-medium">{curr.code}</span> - {curr.name} ({curr.symbol})
                                         </SelectItem>
                                     ))}
+                                    <SelectItem value="CUSTOM">+ Add Custom Currency...</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
                     </div>
+
+                    {/* Custom Currency Input Field */}
+                    {isCustomCurrency && (
+                        <div className="p-3 bg-muted/40 rounded-lg border space-y-1.5">
+                            <Label className="text-xs font-bold text-primary">Custom Currency Code / Symbol *</Label>
+                            <Input 
+                                value={form.customCurrency || ''} 
+                                onChange={e => setForm({...form, customCurrency: e.target.value})} 
+                                placeholder="e.g. AU$, S$, SAR, NZD, CHF, R$" 
+                            />
+                            <p className="text-[11px] text-muted-foreground">
+                                Enter your custom currency symbol or code exactly as you want it displayed on invoices (e.g. AU$, S$, SAR).
+                            </p>
+                        </div>
+                    )}
 
                     {/* Bank Identity */}
                     <div className="grid grid-cols-2 gap-4">

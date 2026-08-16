@@ -32,12 +32,17 @@ export default function ProfilePage() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
 
+  // 2FA Email Backup State
+  const [twoFactorEmail, setTwoFactorEmail] = useState("");
+  const [isSaving2faEmail, setIsSaving2faEmail] = useState(false);
+
   // 1. Fetch User Data
   const loadProfile = async () => {
     try {
       const res = await api.get('/profile');
       setUser(res.data);
       setEmail(res.data.email);
+      setTwoFactorEmail(res.data.two_factor_email || "");
     } catch (e) {
       console.error(e);
     } finally {
@@ -107,6 +112,19 @@ export default function ProfilePage() {
     }
   };
 
+  const handleSave2faEmail = async () => {
+    setIsSaving2faEmail(true);
+    try {
+      await api.put('/profile/2fa-email', { two_factor_email: twoFactorEmail });
+      toast("2FA Backup Email saved successfully!", "success");
+      loadProfile();
+    } catch (e: any) {
+      toast(e.response?.data?.error || "Failed to save 2FA email", "error");
+    } finally {
+      setIsSaving2faEmail(false);
+    }
+  };
+
   if (loading) return <div className="p-10 text-center">Loading profile...</div>;
 
   return (
@@ -173,10 +191,10 @@ export default function ProfilePage() {
                 <Lock className={`w-8 h-8 ${user.two_factor_enabled ? 'text-green-500' : 'text-slate-300'}`} />
              </div>
 
-             <div className="space-y-2">
+              <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
                     {user.two_factor_enabled 
-                       ? "Your account is secured with 2FA. You will need a code from your authenticator app to login."
+                       ? "Your account is secured with 2FA. You will need a code from your authenticator app (or backup email) to login."
                        : "Add an extra layer of security to your account by enabling 2FA."
                     }
                 </p>
@@ -186,7 +204,38 @@ export default function ProfilePage() {
                 ) : (
                     <Button variant="outline" onClick={initiate2fa} className="w-full border-primary text-primary hover:bg-primary/10">Enable 2FA</Button>
                 )}
-             </div>
+              </div>
+
+              {/* BACKUP EMAIL FOR 2FA */}
+              <div className="pt-4 border-t space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                    📧 Backup Email for 2FA Codes
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    If you lose access to your Authenticator app, login codes will be sent to this email via system SMTP. (Defaults to account email if blank).
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Input 
+                    type="email" 
+                    placeholder="e.g. personal.gmail@gmail.com" 
+                    value={twoFactorEmail}
+                    onChange={e => setTwoFactorEmail(e.target.value)}
+                    className="text-xs"
+                  />
+                  <Button 
+                    type="button" 
+                    size="sm" 
+                    onClick={handleSave2faEmail}
+                    disabled={isSaving2faEmail}
+                    className="bg-primary text-primary-foreground text-xs whitespace-nowrap"
+                  >
+                    {isSaving2faEmail ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : "Save Email"}
+                  </Button>
+                </div>
+              </div>
 
           </CardContent>
         </Card>

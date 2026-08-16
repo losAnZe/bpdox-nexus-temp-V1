@@ -86,13 +86,29 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
     // Generate words based on currency
     const amountInWords = getAmountInWords(Number(invoice.grand_total), currency);
         
-    // 2. Formatters
+    const getCurrencySymbol = (code: string) => {
+      if (!code) return '₹';
+      const map: Record<string, string> = {
+        'AUD': 'AUD', 'AU$': 'AUD',
+        'SGD': 'SGD', 'S$': 'SGD', 'SG$': 'SGD',
+        'USD': 'US$', 'US$': 'US$',
+        'CAD': 'CAD', 'CA$': 'CAD',
+        'INR': '₹', '₹': '₹',
+        'EUR': '€', '€': '€',
+        'GBP': '£', '£': '£',
+        'AED': 'AED', 'JPY': '¥'
+      };
+      return map[code.toUpperCase()] || map[code] || code;
+    };
+
     const formatCurrency = (amount: any) => {
-      return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: currency,
-        minimumFractionDigits: 2
-      }).format(Number(amount) || 0);
+      const val = Number(amount) || 0;
+      const numStr = new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(val);
+      const symbol = getCurrencySymbol(currency);
+      return `${symbol} ${numStr}`;
     };
 
     const formatDate = (dateString: any) => {

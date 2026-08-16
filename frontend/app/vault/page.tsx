@@ -64,6 +64,7 @@ interface Credential {
 export default function VaultPage() {
   const { toast } = useToast();
   const { isSudo, hasPermission } = usePermissions();
+  const canViewConfidential = isSudo || hasPermission('vault', 'view_confidential');
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -302,13 +303,20 @@ export default function VaultPage() {
       return toast("Client, Title, Username, and Password are required.", "warning");
     }
 
+    const payload = {
+      ...formData,
+      is_confidential: canViewConfidential
+        ? formData.is_confidential
+        : (isEditing && selectedCred ? Boolean(selectedCred.is_confidential) : false)
+    };
+
     setSubmitting(true);
     try {
       if (isEditing && selectedCred) {
-        await api.put(`/vault/${selectedCred.id}`, formData);
+        await api.put(`/vault/${selectedCred.id}`, payload);
         toast("Credential updated successfully", "success");
       } else {
-        await api.post('/vault', formData);
+        await api.post('/vault', payload);
         toast("Credential created successfully", "success");
       }
       setFormOpen(false);
@@ -810,35 +818,37 @@ export default function VaultPage() {
             </div>
 
             {/* Confidential Toggle */}
-            <div
-              onClick={() => setFormData(p => ({ ...p, is_confidential: !p.is_confidential }))}
-              className={cn(
-                "flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all select-none",
-                formData.is_confidential
-                  ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600"
-                  : "border-border bg-muted/30 hover:border-muted-foreground/30"
-              )}
-            >
-              <div className={cn(
-                "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all",
-                formData.is_confidential ? "bg-amber-500 border-amber-500" : "border-muted-foreground"
-              )}>
-                {formData.is_confidential && (
-                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
+            {canViewConfidential && (
+              <div
+                onClick={() => setFormData(p => ({ ...p, is_confidential: !p.is_confidential }))}
+                className={cn(
+                  "flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all select-none",
+                  formData.is_confidential
+                    ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600"
+                    : "border-border bg-muted/30 hover:border-muted-foreground/30"
                 )}
+              >
+                <div className={cn(
+                  "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all",
+                  formData.is_confidential ? "bg-amber-500 border-amber-500" : "border-muted-foreground"
+                )}>
+                  {formData.is_confidential && (
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+                <Lock className={cn("w-4 h-4 flex-shrink-0", formData.is_confidential ? "text-amber-600" : "text-muted-foreground")} />
+                <div className="flex-1">
+                  <p className={cn("text-sm font-semibold", formData.is_confidential ? "text-amber-700 dark:text-amber-400" : "text-foreground")}>
+                    Mark as Confidential
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Only Sudo Admin and users with special permission can view this credential.
+                  </p>
+                </div>
               </div>
-              <Lock className={cn("w-4 h-4 flex-shrink-0", formData.is_confidential ? "text-amber-600" : "text-muted-foreground")} />
-              <div className="flex-1">
-                <p className={cn("text-sm font-semibold", formData.is_confidential ? "text-amber-700 dark:text-amber-400" : "text-foreground")}>
-                  Mark as Confidential
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Only Sudo Admin and users with special permission can view this credential.
-                </p>
-              </div>
-            </div>
+            )}
 
             <DialogFooter className="mt-4">
               <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>

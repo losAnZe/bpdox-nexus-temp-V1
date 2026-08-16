@@ -69,12 +69,13 @@ interface ClientAsset {
 
 export default function ClientAssetsPage() {
   const { toast } = useToast();
-  const { isAdmin } = useRole();
+  const { isAdmin, isSudo } = useRole();
   const { hasPermission } = usePermissions();
 
   const canCreate = hasPermission('assets', 'create');
   const canEdit = hasPermission('assets', 'edit');
   const canDelete = hasPermission('assets', 'delete');
+  const canViewConfidential = isSudo || hasPermission('assets', 'view_confidential');
 
   const [assets, setAssets] = useState<ClientAsset[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -335,12 +336,19 @@ export default function ClientAssetsPage() {
       return toast("Please fill in all required fields", "warning");
     }
 
+    const payload = {
+      ...formData,
+      is_confidential: canViewConfidential
+        ? formData.is_confidential
+        : (isEditing && selectedAsset ? Boolean((selectedAsset as any).is_confidential) : false)
+    };
+
     try {
       if (isEditing && selectedAsset) {
-        await api.put(`/assets/${selectedAsset.id}`, formData);
+        await api.put(`/assets/${selectedAsset.id}`, payload);
         toast("Asset updated successfully", "success");
       } else {
-        await api.post("/assets", formData);
+        await api.post("/assets", payload);
         toast("Asset registered successfully", "success");
       }
       setFormOpen(false);
@@ -1040,37 +1048,39 @@ export default function ClientAssetsPage() {
               </div>
 
               {/* Confidential Toggle */}
-              <div className="col-span-2">
-                <div
-                  onClick={() => setFormData(prev => ({ ...prev, is_confidential: !prev.is_confidential }))}
-                  className={cn(
-                    "flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all select-none",
-                    formData.is_confidential
-                      ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600"
-                      : "border-border bg-muted/30 hover:border-muted-foreground/30"
-                  )}
-                >
-                  <div className={cn(
-                    "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all",
-                    formData.is_confidential ? "bg-amber-500 border-amber-500" : "border-muted-foreground"
-                  )}>
-                    {formData.is_confidential && (
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
+              {canViewConfidential && (
+                <div className="col-span-2">
+                  <div
+                    onClick={() => setFormData(prev => ({ ...prev, is_confidential: !prev.is_confidential }))}
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all select-none",
+                      formData.is_confidential
+                        ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600"
+                        : "border-border bg-muted/30 hover:border-muted-foreground/30"
                     )}
-                  </div>
-                  <Lock className={cn("w-4 h-4 flex-shrink-0", formData.is_confidential ? "text-amber-600" : "text-muted-foreground")} />
-                  <div className="flex-1">
-                    <p className={cn("text-sm font-semibold", formData.is_confidential ? "text-amber-700 dark:text-amber-400" : "text-foreground")}>
-                      Mark as Confidential
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Only Sudo Admin and users with special permission can view this asset.
-                    </p>
+                  >
+                    <div className={cn(
+                      "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all",
+                      formData.is_confidential ? "bg-amber-500 border-amber-500" : "border-muted-foreground"
+                    )}>
+                      {formData.is_confidential && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                    <Lock className={cn("w-4 h-4 flex-shrink-0", formData.is_confidential ? "text-amber-600" : "text-muted-foreground")} />
+                    <div className="flex-1">
+                      <p className={cn("text-sm font-semibold", formData.is_confidential ? "text-amber-700 dark:text-amber-400" : "text-foreground")}>
+                        Mark as Confidential
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Only Sudo Admin and users with special permission can view this asset.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
             </div>
             

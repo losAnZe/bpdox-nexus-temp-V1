@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
+import { Menu, Clock, Calendar } from "lucide-react";
 import { 
   Sheet, 
   SheetContent, 
@@ -13,13 +13,14 @@ import {
 import { Sidebar } from "./Sidebar";
 import { Button } from "@/components/ui/button";
 import { NotificationCenter } from "./NotificationCenter";
-import api from "@/lib/api"; // Added API import
+import api from "@/lib/api";
 
 export function TopNavbar() {
   const pathname = usePathname();
   
   // START: Dynamic Software Name Logic
   const [softwareName, setSoftwareName] = useState('InvoiceCore'); // Default fallback
+  const [timeState, setTimeState] = useState<{ time: string; date: string } | null>(null);
 
   useEffect(() => {
     api.get('/settings/software-name')
@@ -29,6 +30,20 @@ export function TopNavbar() {
         }
       })
       .catch(e => console.error("Failed to fetch software name", e));
+  }, []);
+
+  // Live Date & Time ticker
+  useEffect(() => {
+    const updateDateTime = () => {
+      const now = new Date();
+      setTimeState({
+        time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }),
+        date: now.toLocaleDateString([], { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+      });
+    };
+    updateDateTime();
+    const timer = setInterval(updateDateTime, 1000);
+    return () => clearInterval(timer);
   }, []);
 
   const getSoftwareNameParts = () => {
@@ -42,7 +57,6 @@ export function TopNavbar() {
         return part;
     });
   };
-  // END: Dynamic Software Name Logic
 
   // Format current path for Breadcrumbs (e.g. "/invoices/new" -> "Invoices / New")
   const pageTitle = pathname === "/" 
@@ -109,7 +123,22 @@ export function TopNavbar() {
         </div>
 
         {/* --- RIGHT SIDE ACTIONS --- */}
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex items-center gap-3 ml-auto">
+            {/* Live Date & Time Widget */}
+            {timeState && (
+              <div className="hidden sm:flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-card border border-border/60 shadow-sm backdrop-blur-md text-xs font-medium text-foreground hover:border-primary/40 transition-all">
+                <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
+                  <Calendar className="w-3.5 h-3.5 text-primary/80" />
+                  <span>{timeState.date}</span>
+                </div>
+                <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
+                <div className="flex items-center gap-1.5 font-mono font-bold text-foreground">
+                  <Clock className="w-3.5 h-3.5 text-primary" />
+                  <span>{timeState.time}</span>
+                </div>
+              </div>
+            )}
+
             {/* Notification Center */}
             <NotificationCenter />
         </div>

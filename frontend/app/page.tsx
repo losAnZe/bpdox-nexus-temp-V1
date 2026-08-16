@@ -144,7 +144,7 @@ export default function DashboardPage() {
   
   // --- STATE MANAGEMENT ---
   const [activeYears, setActiveYears] = useState<number[]>([initialFyStart]); 
-  const [overviewFilter, setOverviewFilter] = useState<string>("monthly");
+  const [overviewFilter, setOverviewFilter] = useState<string>(`FY-${initialFyStart}`);
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [summary, setSummary] = useState<any>({});
 
@@ -162,12 +162,16 @@ export default function DashboardPage() {
   const [sharedInvoices, setSharedInvoices] = useState<any[]>([]);
 
   // Dedicated Card Filters for Balances History (same Filter By presets & custom date range as Dashboard)
-  const [historyFilter, setHistoryFilter] = useState<string>("all");
+  const [historyFilter, setHistoryFilter] = useState<string>(`FY-${initialFyStart}`);
   const [historyCustomRange, setHistoryCustomRange] = useState<DateRange | undefined>();
 
   // Dedicated Card Filters for Pending Invoices (same Filter By presets & custom date range as Dashboard)
   const [pendingFilter, setPendingFilter] = useState<string>("all");
   const [pendingCustomRange, setPendingCustomRange] = useState<DateRange | undefined>();
+
+  // Dedicated Card Filters for Monthly Performance
+  const [monthlyPerformanceFilter, setMonthlyPerformanceFilter] = useState<string>(`FY-${initialFyStart}`);
+  const [monthlyPerformanceCustomRange, setMonthlyPerformanceCustomRange] = useState<DateRange | undefined>();
   
   const [loading, setLoading] = useState(true);
   const [loadingStats, setLoadingStats] = useState(false);
@@ -379,6 +383,23 @@ export default function DashboardPage() {
     });
   }, [sharedInvoices, pendingFilter, pendingCustomRange]);
 
+  // --- MONTHLY PERFORMANCE CARD FILTERS ---
+  const filteredMonthlyPerformanceData = useMemo(() => {
+    if (monthlyPerformanceFilter === 'all' && !monthlyPerformanceCustomRange) {
+      return historyWithBalance;
+    }
+    const dates = getOverviewDates(monthlyPerformanceFilter, monthlyPerformanceCustomRange);
+    const fromTime = startOfDay(dates.from).getTime();
+    const toTime = endOfDay(dates.to).getTime();
+
+    return historyWithBalance.filter((m: any) => {
+      const d = parseFlexibleDate(m.month || m.date);
+      if (isNaN(d.getTime())) return true;
+      const t = d.getTime();
+      return t >= fromTime && t <= toTime;
+    });
+  }, [historyWithBalance, monthlyPerformanceFilter, monthlyPerformanceCustomRange]);
+
   if (!mounted) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>;
   if (loading) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>;
 
@@ -412,6 +433,9 @@ export default function DashboardPage() {
                         <SelectItem value="this_quarter">This Quarter</SelectItem>
                         <SelectItem value="this_year">This Year (Jan-Dec)</SelectItem>
                         <SelectItem value="all">All Time</SelectItem>
+                        {overviewFilter === 'custom' && (
+                            <SelectItem value="custom">Custom Date Range</SelectItem>
+                        )}
                         
                         <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1.5 mt-2 tracking-wider">Financial Years</p>
                         {activeYears.map(year => (
@@ -572,10 +596,85 @@ export default function DashboardPage() {
         <ChartCard 
             className="min-w-0 overflow-hidden"
             title="Monthly Performance" 
-            description="Issued Sales Invoices vs Total Expenses"
+            description="Issued Sales Invoices vs Total Expenses over selected range"
+            action={
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {/* Preset Filter */}
+                    <Select value={monthlyPerformanceFilter} onValueChange={(val) => { setMonthlyPerformanceFilter(val); setMonthlyPerformanceCustomRange(undefined); }}>
+                        <SelectTrigger className="h-8 w-[140px] bg-background border-input shadow-sm text-xs font-semibold">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <div className="max-h-[260px] overflow-y-auto p-1">
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1 tracking-wider">Presets</p>
+                                <SelectItem value="all">All Time</SelectItem>
+                                <SelectItem value="today">Today</SelectItem>
+                                <SelectItem value="yesterday">Yesterday</SelectItem>
+                                <SelectItem value="this_week">This Week</SelectItem>
+                                <SelectItem value="last_week">Last Week</SelectItem>
+                                <SelectItem value="this_month">This Month</SelectItem>
+                                <SelectItem value="last_month">Last Month</SelectItem>
+                                <SelectItem value="this_quarter">This Quarter</SelectItem>
+                                <SelectItem value="this_year">This Year (Jan-Dec)</SelectItem>
+                                {monthlyPerformanceFilter === 'custom' && (
+                                    <SelectItem value="custom">Custom Date Range</SelectItem>
+                                )}
+                                
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1 mt-2 tracking-wider">Financial Years</p>
+                                {activeYears.map(year => (
+                                    <SelectItem key={year} value={`FY-${year}`}>
+                                        FY {year}-{(year+1).toString().slice(-2)}
+                                    </SelectItem>
+                                ))}
+                            </div>
+                        </SelectContent>
+                    </Select>
+
+                    {/* Custom Range Calendar */}
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" size="sm" className={cn("h-8 w-[150px] justify-start text-left text-xs font-semibold px-2", !monthlyPerformanceCustomRange && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-1 h-3 w-3 shrink-0" />
+                                {monthlyPerformanceCustomRange?.from ? (
+                                    monthlyPerformanceCustomRange.to ? (
+                                        <>{format(monthlyPerformanceCustomRange.from, "LLL dd")} - {format(monthlyPerformanceCustomRange.to, "LLL dd")}</>
+                                    ) : format(monthlyPerformanceCustomRange.from, "LLL dd, yyyy")
+                                ) : <span className="truncate">Custom Range</span>}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="end">
+                            <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={monthlyPerformanceCustomRange?.from}
+                                selected={monthlyPerformanceCustomRange}
+                                onSelect={(range) => {
+                                    if (range) {
+                                        setMonthlyPerformanceFilter('custom');
+                                        setMonthlyPerformanceCustomRange(range);
+                                    }
+                                }}
+                                numberOfMonths={2}
+                            />
+                        </PopoverContent>
+                    </Popover>
+
+                    {(monthlyPerformanceFilter !== `FY-${initialFyStart}` || monthlyPerformanceCustomRange) && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            onClick={() => { setMonthlyPerformanceFilter(`FY-${initialFyStart}`); setMonthlyPerformanceCustomRange(undefined); }}
+                            title="Reset Filter"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </Button>
+                    )}
+                </div>
+            }
         >
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                <BarChart data={historyWithBalance}>
+                <BarChart data={filteredMonthlyPerformanceData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis dataKey="month" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} dy={10} />
                     <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickFormatter={(val) => `₹${val/1000}k`} tickLine={false} axisLine={false} width={45} />
@@ -669,6 +768,9 @@ export default function DashboardPage() {
                                 <SelectItem value="last_month">Last Month</SelectItem>
                                 <SelectItem value="this_quarter">This Quarter</SelectItem>
                                 <SelectItem value="this_year">This Year (Jan-Dec)</SelectItem>
+                                {historyFilter === 'custom' && (
+                                    <SelectItem value="custom">Custom Date Range</SelectItem>
+                                )}
                                 
                                 <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1 mt-2 tracking-wider">Financial Years</p>
                                 {activeYears.map(year => (

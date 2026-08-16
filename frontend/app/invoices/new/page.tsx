@@ -15,6 +15,7 @@ import api from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from 'next/navigation';
 import { Switch } from "@/components/ui/switch";
+import { formatMoneyWithCurrency } from "@/lib/currencies";
 
 // --- Currency Helpers ---
 const getCurrencyLocale = (code: string) => {
@@ -175,10 +176,7 @@ export default function NewInvoicePage() {
 
   // Helper for formatting money
   const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat(getCurrencyLocale(currency), { 
-        style: 'currency', 
-        currency: currency 
-    }).format(amount);
+    return formatMoneyWithCurrency(amount, currency);
   };
 
   return (

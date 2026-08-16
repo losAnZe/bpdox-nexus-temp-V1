@@ -146,6 +146,20 @@ router.post('/', checkPermission('assets', 'create'), async (req: Request, res: 
       }
     }
 
+    const authReq = req as AuthRequest;
+    const isSudoAdmin = authReq.user?.role === 'SUDO_ADMIN';
+    let canManageConfidential = isSudoAdmin;
+
+    if (!isSudoAdmin && authReq.user?.id) {
+      const userRecord = await prisma.user.findUnique({
+        where: { id: authReq.user.id },
+        select: { permissions: true }
+      });
+      const perms = (userRecord?.permissions as any) || {};
+      const assetPerms: string[] = Array.isArray(perms?.assets) ? perms.assets : [];
+      canManageConfidential = assetPerms.includes('view_confidential');
+    }
+
     const newAsset = await prisma.clientAsset.create({
       data: {
         client_id: Number(client_id),
@@ -163,11 +177,10 @@ router.post('/', checkPermission('assets', 'create'), async (req: Request, res: 
         notes: notes || "",
         attachments: attachments || [],
         reminders_sent: [],
-        is_confidential: Boolean(is_confidential) || false
+        is_confidential: canManageConfidential ? (Boolean(is_confidential) || false) : false
       }
     });
 
-    const authReq = req as AuthRequest;
     if (authReq.user) {
       const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
       await ActivityService.log(
@@ -245,6 +258,20 @@ router.put('/:id', checkPermission('assets', 'edit'), async (req: Request, res: 
       }
     }
 
+    const authReq = req as AuthRequest;
+    const isSudoAdmin = authReq.user?.role === 'SUDO_ADMIN';
+    let canManageConfidential = isSudoAdmin;
+
+    if (!isSudoAdmin && authReq.user?.id) {
+      const userRecord = await prisma.user.findUnique({
+        where: { id: authReq.user.id },
+        select: { permissions: true }
+      });
+      const perms = (userRecord?.permissions as any) || {};
+      const assetPerms: string[] = Array.isArray(perms?.assets) ? perms.assets : [];
+      canManageConfidential = assetPerms.includes('view_confidential');
+    }
+
     const updated = await prisma.clientAsset.update({
       where: { id },
       data: {
@@ -263,11 +290,12 @@ router.put('/:id', checkPermission('assets', 'edit'), async (req: Request, res: 
         notes,
         attachments,
         reminders_sent: updatedReminders as Prisma.InputJsonValue,
-        is_confidential: is_confidential !== undefined ? Boolean(is_confidential) : undefined
+        is_confidential: canManageConfidential
+          ? (is_confidential !== undefined ? Boolean(is_confidential) : undefined)
+          : existing.is_confidential
       }
     });
 
-    const authReq = req as AuthRequest;
     if (authReq.user) {
       const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
       await ActivityService.log(

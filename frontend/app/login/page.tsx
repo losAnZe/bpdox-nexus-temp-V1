@@ -32,6 +32,23 @@ export default function LoginPage() {
     // return () => root.removeAttribute('data-style');
   }, []);
 
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSentMessage, setEmailSentMessage] = useState("");
+
+  const handleSend2faEmail = async () => {
+    setSendingEmail(true);
+    setError("");
+    setEmailSentMessage("");
+    try {
+      const res = await api.post('/auth/send-2fa-email', { email, password });
+      setEmailSentMessage(res.data.message || `Code sent to ${res.data.maskedEmail}`);
+    } catch (err: any) {
+      setError(err.response?.data?.error || "Failed to send 2FA email");
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -153,19 +170,40 @@ export default function LoginPage() {
                 </div>
             </div>
 
-            {/* Step 2: TOTP Input */}
+            {/* Step 2: TOTP / Email OTP Input */}
             {show2fa && (
-                <div className="space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <Label className="text-muted-foreground">Authenticator Code</Label>
-                    <Input 
-                        type="text" 
-                        placeholder="000 000" 
-                        value={totpToken} 
-                        onChange={(e) => setTotpToken(e.target.value)} 
-                        className="bg-secondary/20 border-input text-foreground text-center text-lg tracking-[0.5em] font-mono focus-visible:ring-primary"
-                        maxLength={6}
-                        autoFocus
-                    />
+                <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">2FA Verification Code</Label>
+                      <Input 
+                          type="text" 
+                          placeholder="000 000" 
+                          value={totpToken} 
+                          onChange={(e) => setTotpToken(e.target.value)} 
+                          className="bg-secondary/20 border-input text-foreground text-center text-lg tracking-[0.5em] font-mono focus-visible:ring-primary"
+                          maxLength={6}
+                          autoFocus
+                      />
+                      <p className="text-[11px] text-muted-foreground text-center">
+                        Enter 6-digit code from Authenticator app or received via Email.
+                      </p>
+                    </div>
+
+                    <div className="pt-2 text-center">
+                      <button
+                        type="button"
+                        onClick={handleSend2faEmail}
+                        disabled={sendingEmail}
+                        className="text-xs text-primary hover:underline font-medium inline-flex items-center gap-1.5"
+                      >
+                        {sendingEmail ? "Sending Code via SMTP..." : "✉️ Can't access Authenticator? Send Code to Email"}
+                      </button>
+                      {emailSentMessage && (
+                        <p className="text-xs text-emerald-400 font-semibold mt-1.5 p-2 bg-emerald-950/40 rounded border border-emerald-800/40">
+                          {emailSentMessage}
+                        </p>
+                      )}
+                    </div>
                 </div>
             )}
             

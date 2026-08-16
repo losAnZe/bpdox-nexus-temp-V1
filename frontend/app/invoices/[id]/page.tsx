@@ -10,7 +10,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { CalendarIcon, Save, Loader2, ArrowLeft, RefreshCw } from "lucide-react";
-import { InvoiceItemsTable } from "../new/invoice-items"; 
+import { InvoiceItemsTable, LineItem } from "../new/invoice-items";
+import { formatMoneyWithCurrency } from "@/lib/currencies"; 
 import api from "@/lib/api"; 
 import Link from "next/link";
 import { useRouter, useParams } from 'next/navigation';
@@ -261,7 +262,7 @@ export default function EditInvoicePage() {
                             <span>Total</span>
                             {/* DYNAMIC CURRENCY FORMATTING */}
                             <span>
-                                {new Intl.NumberFormat('en-IN', { style: 'currency', currency: currency }).format(grandTotal)}
+                                {formatMoneyWithCurrency(grandTotal, currency)}
                             </span>
                         </div>
                     </div>

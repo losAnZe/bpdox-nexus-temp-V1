@@ -29,6 +29,9 @@ model User {
 // Security Features
   two_factor_secret  String?
   two_factor_enabled Boolean  @default(false)
+  two_factor_email   String?
+  email_otp_code     String?
+  email_otp_expiry   DateTime?
   backup_codes       Json?
   reset_token        String?   @unique
   reset_token_expiry DateTime?
