@@ -17,28 +17,69 @@ const getFinancialYear = (date: Date) => {
 
 router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, res: Response) => {
   try {
-    const { from, to, years, sections } = req.query;
+    const { from, to, years, sections, allTime } = req.query;
+    const isAllTime = allTime === 'true';
     
     const requestedSections = sections ? (sections as string).split(',') : ['ALL'];
     const shouldFetch = (section: string) => requestedSections.includes('ALL') || requestedSections.includes(section);
 
-    // --- FIX: DEFAULT TO FINANCIAL YEAR (April 1 - March 31) ---
-    // If dates are missing, calculate the current active Financial Year.
     let fromDate: Date;
     let toDate: Date;
 
     if (from && to) {
         fromDate = new Date(from as string);
         toDate = new Date(to as string);
+    } else if (isAllTime) {
+        // Fetch Min and Max dates across the DB for all-time range
+        const [invBounds, expBounds, incBounds] = await Promise.all([
+            prisma.invoice.aggregate({ 
+                _min: { issue_date: true, payment_date: true, due_date: true }, 
+                _max: { issue_date: true, payment_date: true, due_date: true } 
+            }),
+            prisma.expense.aggregate({ _min: { date: true }, _max: { date: true } }),
+            // @ts-ignore
+            prisma.otherIncome ? prisma.otherIncome.aggregate({ _min: { date: true }, _max: { date: true } }) : { _min: { date: null }, _max: { date: null } }
+        ]);
+
+        const minDates = [
+            invBounds._min.issue_date, 
+            invBounds._min.payment_date, 
+            invBounds._min.due_date,
+            expBounds._min.date, 
+            incBounds?._min?.date
+        ].filter(d => d != null) as Date[];
+
+        const maxDates = [
+            invBounds._max.issue_date, 
+            invBounds._max.payment_date, 
+            invBounds._max.due_date,
+            expBounds._max.date, 
+            incBounds?._max?.date
+        ].filter(d => d != null) as Date[];
+
+        if (minDates.length > 0 && maxDates.length > 0) {
+            const minTime = Math.min(...minDates.map(d => new Date(d).getTime()));
+            const maxTime = Math.max(...maxDates.map(d => new Date(d).getTime()));
+
+            const minD = new Date(minTime);
+            const maxD = new Date(maxTime);
+
+            fromDate = new Date(minD.getFullYear(), minD.getMonth(), 1, 0, 0, 0);
+            toDate = new Date(maxD.getFullYear(), maxD.getMonth() + 1, 0, 23, 59, 59);
+        } else {
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const startYear = currentMonth < 3 ? now.getFullYear() - 1 : now.getFullYear();
+            fromDate = new Date(startYear, 3, 1);
+            toDate = new Date(startYear + 1, 2, 31, 23, 59, 59);
+        }
     } else {
         const now = new Date();
         const currentMonth = now.getMonth(); 
-        // If Jan-Mar (0-2), start year is previous year. Else current year.
         const startYear = currentMonth < 3 ? now.getFullYear() - 1 : now.getFullYear();
         
-        // Force April 1st to March 31st
-        fromDate = new Date(startYear, 3, 1); // April 1st
-        toDate = new Date(startYear + 1, 2, 31); // March 31st next year
+        fromDate = new Date(startYear, 3, 1);
+        toDate = new Date(startYear + 1, 2, 31, 23, 59, 59);
     }
 
     const response: any = { summary: {}, charts: {}, tables: {}, availableYears: [] };
@@ -49,15 +90,31 @@ router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, 
     if (shouldFetch('availableYears')) {
         // A. Get Min/Max dates from Invoices, Expenses, AND OtherIncome
         const [invBounds, expBounds, incBounds] = await Promise.all([
-            prisma.invoice.aggregate({ _min: { issue_date: true }, _max: { issue_date: true } }),
+            prisma.invoice.aggregate({ 
+                _min: { issue_date: true, payment_date: true, due_date: true }, 
+                _max: { issue_date: true, payment_date: true, due_date: true } 
+            }),
             prisma.expense.aggregate({ _min: { date: true }, _max: { date: true } }),
             // @ts-ignore
             prisma.otherIncome ? prisma.otherIncome.aggregate({ _min: { date: true }, _max: { date: true } }) : { _min: { date: null }, _max: { date: null } }
         ]);
 
         // B. Consolidate bounds to find global Min and Max
-        const minDates = [invBounds._min.issue_date, expBounds._min.date, incBounds?._min?.date].filter(d => d != null) as Date[];
-        const maxDates = [invBounds._max.issue_date, expBounds._max.date, incBounds?._max?.date].filter(d => d != null) as Date[];
+        const minDates = [
+            invBounds._min.issue_date, 
+            invBounds._min.payment_date, 
+            invBounds._min.due_date,
+            expBounds._min.date, 
+            incBounds?._min?.date
+        ].filter(d => d != null) as Date[];
+
+        const maxDates = [
+            invBounds._max.issue_date, 
+            invBounds._max.payment_date, 
+            invBounds._max.due_date,
+            expBounds._max.date, 
+            incBounds?._max?.date
+        ].filter(d => d != null) as Date[];
 
         // C. Default to current FY if no data exists
         const currentMonth = new Date().getMonth();
@@ -68,15 +125,15 @@ router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, 
 
         // D. Calculate Global FY Range based on data
         if (minDates.length > 0) {
-            const minDate = new Date(Math.min(...minDates.map(d => d.getTime())));
+            const minDate = new Date(Math.min(...minDates.map(d => new Date(d).getTime())));
             startYear = minDate.getMonth() < 3 ? minDate.getFullYear() - 1 : minDate.getFullYear();
         }
         if (maxDates.length > 0) {
-             const maxDate = new Date(Math.max(...maxDates.map(d => d.getTime())));
+             const maxDate = new Date(Math.max(...maxDates.map(d => new Date(d).getTime())));
              endYear = maxDate.getMonth() < 3 ? maxDate.getFullYear() - 1 : maxDate.getFullYear();
         }
 
-        // E. Generate Array (Descending order: 2025, 2024, 2023...)
+        // E. Generate Array (Descending order: 2029, 2028, ..., 2024)
         const activeYears = [];
         for (let y = endYear; y >= startYear; y--) {
             activeYears.push(y);
@@ -131,10 +188,10 @@ router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, 
         // CALCULATE AVG MONTHLY SALE (Only divide by months that had sales or expenses activity)
         const salesInvoices = await prisma.invoice.findMany({
             where: {
-                issue_date: { gte: fromDate, lte: toDate },
-                status: { notIn: ['DRAFT', 'Draft', 'CANCELLED', 'Cancelled', 'VOID', 'Void'] }
+                payment_date: { gte: fromDate, lte: toDate },
+                status: { in: ['PAID', 'Paid'] }
             },
-            select: { grand_total: true, received_amount: true, issue_date: true }
+            select: { grand_total: true, received_amount: true, payment_date: true, issue_date: true }
         });
 
         const periodExpenses = await prisma.expense.findMany({
@@ -152,8 +209,9 @@ router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, 
         // Count distinct active months (YYYY-MM) with sales or expenses
         const activeMonthSet = new Set<string>();
         salesInvoices.forEach(inv => {
-            if (inv.issue_date) {
-                activeMonthSet.add(format(new Date(inv.issue_date), 'yyyy-MM'));
+            const d = inv.payment_date || inv.issue_date;
+            if (d) {
+                activeMonthSet.add(format(new Date(d), 'yyyy-MM'));
             }
         });
         periodExpenses.forEach(exp => {

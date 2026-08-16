@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { 
   KeyRound, Plus, Search, Loader2, Eye, EyeOff, Copy, Check, ExternalLink, 
-  Pencil, Trash, Shield, Server, Globe, Database, Cpu, Terminal, Lock, X 
+  Pencil, Trash, Shield, Server, Globe, Database, Cpu, Terminal, Lock, X, 
+  Upload, FileText, Download, Paperclip
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast-context";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -32,6 +33,15 @@ interface Client {
   company_name: string;
 }
 
+interface VaultFile {
+  id: string;
+  originalName: string;
+  diskFileName: string;
+  fileSize: number;
+  mimeType: string;
+  uploadedAt: string;
+}
+
 interface Credential {
   id: number;
   client_id: number;
@@ -43,6 +53,9 @@ interface Credential {
   password?: string;
   port?: string;
   notes?: string;
+  ssh_key?: string;
+  has_ssh_key?: boolean;
+  attached_files?: VaultFile[];
   is_confidential?: boolean;
   created_at: string;
   updated_at: string;
@@ -60,9 +73,12 @@ export default function VaultPage() {
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [clientFilter, setClientFilter] = useState("ALL");
 
-  // State for Revealed Passwords map { [credentialId]: "plainPassword" }
+  // State for Revealed Passwords & SSH Keys
   const [revealedPasswords, setRevealedPasswords] = useState<{ [key: number]: string }>({});
   const [revealingId, setRevealingId] = useState<number | null>(null);
+  const [revealedSshKeys, setRevealedSshKeys] = useState<{ [key: number]: string }>({});
+  const [revealingSshId, setRevealingSshId] = useState<number | null>(null);
+  const [uploadingId, setUploadingId] = useState<number | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Dialog State
@@ -81,6 +97,7 @@ export default function VaultPage() {
     password: "",
     port: "",
     notes: "",
+    ssh_key: "",
     is_confidential: false
   });
 
@@ -132,7 +149,6 @@ export default function VaultPage() {
   // Reveal Decrypted Password
   const togglePasswordReveal = async (id: number) => {
     if (revealedPasswords[id]) {
-      // Hide password
       setRevealedPasswords(prev => {
         const copy = { ...prev };
         delete copy[id];
@@ -145,11 +161,34 @@ export default function VaultPage() {
     try {
       const res = await api.post(`/vault/${id}/reveal`);
       setRevealedPasswords(prev => ({ ...prev, [id]: res.data.password }));
-      toast("Password revealed & action logged in activity audit trail.", "info");
+      toast("Password revealed & action logged in audit trail.", "info");
     } catch (err: any) {
       toast(err.response?.data?.error || "Failed to reveal password", "error");
     } finally {
       setRevealingId(null);
+    }
+  };
+
+  // Reveal Decrypted SSH Key
+  const toggleSshKeyReveal = async (id: number) => {
+    if (revealedSshKeys[id]) {
+      setRevealedSshKeys(prev => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+      return;
+    }
+
+    setRevealingSshId(id);
+    try {
+      const res = await api.post(`/vault/${id}/reveal-ssh`);
+      setRevealedSshKeys(prev => ({ ...prev, [id]: res.data.ssh_key }));
+      toast("SSH Key revealed & action logged in audit trail.", "info");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to reveal SSH key", "error");
+    } finally {
+      setRevealingSshId(null);
     }
   };
 
@@ -162,6 +201,59 @@ export default function VaultPage() {
       setTimeout(() => setCopiedField(null), 2000);
     } catch (e) {
       toast("Failed to copy to clipboard", "error");
+    }
+  };
+
+  // Upload file handler
+  const handleFileUpload = async (credId: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingId(credId);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      await api.post(`/vault/${credId}/upload-file`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      toast("Encrypted file uploaded successfully!", "success");
+      fetchData();
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to upload file", "error");
+    } finally {
+      setUploadingId(null);
+      e.target.value = '';
+    }
+  };
+
+  // Download decrypted file
+  const handleFileDownload = async (credId: number, fileId: string, originalName: string) => {
+    try {
+      const res = await api.get(`/vault/${credId}/download-file/${fileId}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', originalName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast("File decrypted & downloaded", "success");
+    } catch (err: any) {
+      toast("Failed to download file", "error");
+    }
+  };
+
+  // Delete attached file
+  const handleFileDelete = async (credId: number, fileId: string, originalName: string) => {
+    if (!confirm(`Delete encrypted file '${originalName}'?`)) return;
+    try {
+      await api.delete(`/vault/${credId}/delete-file/${fileId}`);
+      toast("File deleted from vault", "success");
+      fetchData();
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to delete file", "error");
     }
   };
 
@@ -178,6 +270,7 @@ export default function VaultPage() {
       password: "",
       port: "",
       notes: "",
+      ssh_key: "",
       is_confidential: false
     });
     setFormOpen(true);
@@ -196,6 +289,7 @@ export default function VaultPage() {
       password: "••••••••",
       port: cred.port || "",
       notes: cred.notes || "",
+      ssh_key: cred.has_ssh_key ? "••••••••" : "",
       is_confidential: cred.is_confidential || false
     });
     setFormOpen(true);
@@ -275,7 +369,7 @@ export default function VaultPage() {
           </div>
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-foreground">Client Credential Vault</h1>
-            <p className="text-xs md:text-sm text-muted-foreground">Encrypted password vault for client hosting, cPanel, CMS, SSH & logins.</p>
+            <p className="text-xs md:text-sm text-muted-foreground">AES-256 encrypted vault for client logins, SSH keys & encrypted file attachments.</p>
           </div>
         </div>
 
@@ -341,6 +435,10 @@ export default function VaultPage() {
           {filteredCredentials.map(cred => {
             const isRevealed = Boolean(revealedPasswords[cred.id]);
             const plainPassword = revealedPasswords[cred.id] || "••••••••";
+
+            const isSshRevealed = Boolean(revealedSshKeys[cred.id]);
+            const plainSshKey = revealedSshKeys[cred.id] || "••••••••••••••••••••••••••••••••";
+            const files = cred.attached_files || [];
 
             return (
               <Card key={cred.id} className="shadow-sm border border-border/60 bg-card hover:border-primary/40 transition-all flex flex-col justify-between">
@@ -443,6 +541,57 @@ export default function VaultPage() {
                     </div>
                   </div>
 
+                  {/* SSH KEY BOX */}
+                  {(cred.has_ssh_key || cred.ssh_key) && (
+                    <div className="p-2.5 rounded bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1">
+                          <Terminal className="w-3.5 h-3.5" /> Encrypted SSH Key
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6 text-purple-600 hover:text-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/40"
+                            disabled={revealingSshId === cred.id}
+                            onClick={() => toggleSshKeyReveal(cred.id)}
+                            title={isSshRevealed ? "Hide SSH Key" : "Reveal SSH Key"}
+                          >
+                            {revealingSshId === cred.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : isSshRevealed ? (
+                              <EyeOff className="w-3 h-3 text-amber-500" />
+                            ) : (
+                              <Eye className="w-3 h-3" />
+                            )}
+                          </Button>
+
+                          {isSshRevealed && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                              onClick={() => copyToClipboard(plainSshKey, "SSH Private Key")}
+                              title="Copy SSH Key"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {isSshRevealed ? (
+                        <pre className="p-2 bg-slate-900 text-slate-100 rounded text-[10px] overflow-x-auto font-mono max-h-32 leading-relaxed">
+                          {plainSshKey}
+                        </pre>
+                      ) : (
+                        <div className="text-[10px] font-mono text-muted-foreground truncate">
+                          ••••••••••••••••••••••••••••••••
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* PORT */}
                   {cred.port && (
                     <div className="flex items-center justify-between p-2 rounded bg-muted/40">
@@ -450,6 +599,70 @@ export default function VaultPage() {
                       <span className="font-mono font-semibold">{cred.port}</span>
                     </div>
                   )}
+
+                  {/* ENCRYPTED ATTACHED FILES */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Paperclip className="w-3 h-3" /> Attached Files ({files.length})
+                      </span>
+
+                      {canEdit && (
+                        <label className="cursor-pointer inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline">
+                          {uploadingId === cred.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Upload className="w-3 h-3" />
+                          )}
+                          <span>Upload File</span>
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            disabled={uploadingId === cred.id}
+                            onChange={(e) => handleFileUpload(cred.id, e)} 
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    {files.length > 0 && (
+                      <div className="space-y-1 max-h-28 overflow-y-auto">
+                        {files.map((file) => (
+                          <div key={file.id} className="flex items-center justify-between p-1.5 rounded bg-muted/30 border border-border/50 text-[11px]">
+                            <div className="flex items-center gap-1.5 truncate max-w-[170px]" title={file.originalName}>
+                              <FileText className="w-3 h-3 text-primary shrink-0" />
+                              <span className="truncate font-medium">{file.originalName}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] text-muted-foreground mr-1">
+                                ({(file.fileSize / 1024).toFixed(0)} KB)
+                              </span>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-5 w-5 text-muted-foreground hover:text-primary"
+                                onClick={() => handleFileDownload(cred.id, file.id, file.originalName)}
+                                title="Download Decrypted File"
+                              >
+                                <Download className="w-3 h-3" />
+                              </Button>
+                              {canEdit && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-5 w-5 text-rose-400 hover:text-rose-600"
+                                  onClick={() => handleFileDelete(cred.id, file.id, file.originalName)}
+                                  title="Delete Encrypted File"
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   {/* NOTES */}
                   {cred.notes && (
@@ -488,10 +701,10 @@ export default function VaultPage() {
 
       {/* CREATE & EDIT MODAL */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{isEditing ? "Edit Credential" : "Add Vault Credential"}</DialogTitle>
-            <DialogDescription>Store encrypted login credentials for a client.</DialogDescription>
+            <DialogDescription>Store encrypted login credentials, SSH keys & files for a client.</DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmitForm} className="space-y-4 mt-2">
@@ -570,6 +783,20 @@ export default function VaultPage() {
                   onChange={e => setFormData(p => ({ ...p, password: e.target.value }))}
                 />
               </div>
+            </div>
+
+            {/* SSH Key Textarea */}
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1">
+                <Terminal className="w-3.5 h-3.5 text-purple-500" /> SSH Private Key (Encrypted AES-256)
+              </Label>
+              <Textarea 
+                placeholder={isEditing && selectedCred?.has_ssh_key ? "Leave blank to keep current key, or paste new key..." : "Paste -----BEGIN OPENSSH PRIVATE KEY----- or RSA key here..."} 
+                value={formData.ssh_key} 
+                onChange={e => setFormData(p => ({ ...p, ssh_key: e.target.value }))}
+                rows={3}
+                className="font-mono text-xs"
+              />
             </div>
 
             {/* Notes */}

@@ -308,6 +308,8 @@ model ClientCredential {
   password    String   // Encrypted at rest (AES-256-GCM)
   port        String?  // e.g. "22", "21", "3306"
   notes       String?
+  ssh_key     String?
+  attached_files Json?
   is_confidential Boolean @default(false) // Hidden from users without vault view_confidential permission
   
   created_at  DateTime @default(now())

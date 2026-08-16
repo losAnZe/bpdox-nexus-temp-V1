@@ -60,4 +60,41 @@ export class VaultService {
       return '••••••••';
     }
   }
+
+  /**
+   * Encrypt binary file Buffer (AES-256-GCM)
+   * Header: IV (16 bytes) + AuthTag (16 bytes) + Ciphertext
+   */
+  static encryptBuffer(buffer: Buffer): Buffer {
+    if (!buffer || buffer.length === 0) return Buffer.alloc(0);
+    
+    const iv = crypto.randomBytes(16);
+    const key = getEncryptionKey();
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+    
+    const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+    
+    return Buffer.concat([iv, authTag, encrypted]);
+  }
+
+  /**
+   * Decrypt binary file Buffer (AES-256-GCM)
+   */
+  static decryptBuffer(encryptedBuffer: Buffer): Buffer {
+    if (!encryptedBuffer || encryptedBuffer.length <= 32) {
+      throw new Error("Invalid or corrupted encrypted file data.");
+    }
+    
+    const iv = encryptedBuffer.subarray(0, 16);
+    const authTag = encryptedBuffer.subarray(16, 32);
+    const ciphertext = encryptedBuffer.subarray(32);
+    const key = getEncryptionKey();
+    
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(authTag);
+    
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  }
 }
+

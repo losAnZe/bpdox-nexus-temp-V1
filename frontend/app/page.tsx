@@ -207,7 +207,8 @@ export default function DashboardPage() {
 
             // All-time params for Balance History (no date filter)
             const allTimeParams = new URLSearchParams({
-                sections: 'monthlyStats'
+                sections: 'monthlyStats',
+                allTime: 'true'
             });
 
             const [statsRes, sharedRes, allTimeRes] = await Promise.all([
@@ -298,6 +299,14 @@ export default function DashboardPage() {
     new Intl.NumberFormat('en-IN', { 
         style: 'currency', 
         currency: 'INR', 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+    }).format(val || 0);
+
+  const formatCurrencyWithCode = (val: number, curr?: string) => 
+    new Intl.NumberFormat('en-IN', { 
+        style: 'currency', 
+        currency: curr || 'INR', 
         minimumFractionDigits: 2, 
         maximumFractionDigits: 2 
     }).format(val || 0);
@@ -855,7 +864,7 @@ export default function DashboardPage() {
                                     )}>{inv.status}</Badge>
                                 </TableCell>
                                 <TableCell className="text-right font-bold text-foreground whitespace-nowrap">
-                                    {formatCurrency(Number(inv.grand_total))}
+                                    {formatCurrencyWithCode(Number(inv.grand_total), inv.currency)}
                                 </TableCell>
                             </TableRow>
                         ))}
