@@ -2,6 +2,33 @@ import fs from 'fs';
 import path from 'path';
 import { format } from 'date-fns';
 
+let _fontBase64Cache: string | null = null;
+const getRedHatDisplayBase64 = (): string => {
+  if (_fontBase64Cache) return _fontBase64Cache;
+
+  const candidatePaths = [
+    path.resolve(__dirname, '../../fonts/RedHatDisplay-Variable.ttf'),
+    path.resolve(__dirname, '../../../fonts/RedHatDisplay-Variable.ttf'),
+    path.resolve(process.cwd(), 'fonts/RedHatDisplay-Variable.ttf'),
+    path.resolve(process.cwd(), 'dist/fonts/RedHatDisplay-Variable.ttf')
+  ];
+
+  for (const fontPath of candidatePaths) {
+    if (fs.existsSync(fontPath)) {
+      try {
+        const fontBuffer = fs.readFileSync(fontPath);
+        _fontBase64Cache = fontBuffer.toString('base64');
+        return _fontBase64Cache;
+      } catch (e) {
+        // continue trying next path
+      }
+    }
+  }
+
+  console.warn('[LedgerTemplate] Could not locate RedHatDisplay-Variable.ttf font file.');
+  return '';
+};
+
 export const generateLedgerHTML = (transactions: any[], dateRange: string, ownerProfile: any) => {
   const profile = ownerProfile?.json_value || {};
   
@@ -14,31 +41,37 @@ export const generateLedgerHTML = (transactions: any[], dateRange: string, owner
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
   };
 
+  const fontBase64 = getRedHatDisplayBase64();
+
   return `
     <!DOCTYPE html>
     <html>
     <head>
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+      <meta charset="UTF-8">
       <style>
-        body { font-family: 'Inter', 'Helvetica', sans-serif; padding: 40px; color: #333; }
-        .header { display: flex; justify-content: space-between; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
-        .title { font-size: 24px; font-weight: bold; color: #4318FF; }
-        .subtitle { font-size: 14px; color: #666; margin-top: 5px; }
-        .meta { text-align: right; font-size: 12px; line-height: 1.5; }
+        @font-face {
+          font-family: 'Red Hat Display';
+          src: url('data:font/truetype;base64,${fontBase64}') format('truetype');
+          font-weight: 100 900;
+          font-style: normal;
+        }
+        body { font-family: 'Red Hat Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px; color: #1e293b; }
+        .header { display: flex; justify-content: space-between; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
+        .title { font-size: 24px; font-weight: 800; color: #2563eb; letter-spacing: -0.02em; }
+        .subtitle { font-size: 13px; color: #64748b; margin-top: 4px; font-weight: 500; }
+        .meta { text-align: right; font-size: 12px; line-height: 1.5; color: #475569; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
-        th { background: #f8fafc; padding: 10px; text-align: left; border-bottom: 1px solid #ddd; font-weight: bold; }
-        td { padding: 8px 10px; border-bottom: 1px solid #eee; }
+        th { background: #f8fafc; padding: 10px; text-align: left; border-bottom: 2px solid #cbd5e1; font-weight: 700; color: #334155; }
+        td { padding: 10px; border-bottom: 1px solid #e2e8f0; }
         .text-right { text-align: right; }
-        .text-green { color: #16a34a; }
-        .text-red { color: #dc2626; }
+        .text-green { color: #16a34a; font-weight: 600; }
+        .text-red { color: #dc2626; font-weight: 600; }
         
-        .summary-box { display: flex; gap: 20px; margin-bottom: 30px; justify-content: flex-end; }
-        .box { background: #f8fafc; padding: 15px; border-radius: 5px; width: 150px; }
-        .box-label { font-size: 10px; text-transform: uppercase; color: #666; }
-        .box-value { font-size: 16px; font-weight: bold; margin-top: 5px; }
+        .summary-box { display: flex; gap: 15px; margin-bottom: 30px; justify-content: flex-end; }
+        .box { background: #f8fafc; padding: 14px 18px; border-radius: 8px; width: 150px; border: 1px solid #e2e8f0; }
+        .box-label { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: 0.05em; }
+        .box-value { font-size: 15px; font-weight: 800; margin-top: 4px; }
       </style>
     </head>
     <body>

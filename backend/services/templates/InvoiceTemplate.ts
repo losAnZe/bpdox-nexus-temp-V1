@@ -5,166 +5,213 @@ import { format } from 'date-fns';
 // --- Helper: Load Red Hat Display font as base64 data URI ---
 let _fontBase64Cache: string | null = null;
 const getRedHatDisplayBase64 = (): string => {
-  if (_fontBase64Cache) return _fontBase64Cache;
-  try {
-    const fontPath = path.resolve(__dirname, '../../fonts/RedHatDisplay-Variable.ttf');
-    const fontBuffer = fs.readFileSync(fontPath);
-    _fontBase64Cache = fontBuffer.toString('base64');
-    return _fontBase64Cache;
-  } catch (e) {
-    console.warn('[InvoiceTemplate] Could not load Red Hat Display font file:', e);
-    return '';
-  }
+    if (_fontBase64Cache) return _fontBase64Cache;
+    try {
+        const fontPath = path.resolve(__dirname, '../../fonts/RedHatDisplay-Variable.ttf');
+        const fontBuffer = fs.readFileSync(fontPath);
+        _fontBase64Cache = fontBuffer.toString('base64');
+        return _fontBase64Cache;
+    } catch (e) {
+        console.warn('[InvoiceTemplate] Could not load Red Hat Display font file:', e);
+        return '';
+    }
 };
 
 // --- Helper: Convert Number to Words (Indian Numbering System) ---
 const numberToWords = (n: number): string => {
-  const units = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const units = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
-  if (n === 0) return '';
+    if (n === 0) return '';
 
-  const convert = (num: number): string => {
-    if (num < 20) return units[num];
-    if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 ? ' ' + units[num % 10] : '');
-    if (num < 1000) return units[Math.floor(num / 100)] + ' Hundred' + (num % 100 ? ' and ' + convert(num % 100) : '');
-    if (num < 100000) return convert(Math.floor(num / 1000)) + ' Thousand' + (num % 1000 ? ' ' + convert(num % 1000) : '');
-    if (num < 10000000) return convert(Math.floor(num / 100000)) + ' Lakh' + (num % 100000 ? ' ' + convert(num % 100000) : '');
-    return convert(Math.floor(num / 10000000)) + ' Crore' + (num % 10000000 ? ' ' + convert(num % 10000000) : '');
-  };
+    const convert = (num: number): string => {
+        if (num < 20) return units[num];
+        if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 ? ' ' + units[num % 10] : '');
+        if (num < 1000) return units[Math.floor(num / 100)] + ' Hundred' + (num % 100 ? ' and ' + convert(num % 100) : '');
+        if (num < 100000) return convert(Math.floor(num / 1000)) + ' Thousand' + (num % 1000 ? ' ' + convert(num % 1000) : '');
+        if (num < 10000000) return convert(Math.floor(num / 100000)) + ' Lakh' + (num % 100000 ? ' ' + convert(num % 100000) : '');
+        return convert(Math.floor(num / 10000000)) + ' Crore' + (num % 10000000 ? ' ' + convert(num % 10000000) : '');
+    };
 
-  return convert(n);
+    return convert(n);
 };
 
 // --- Helper: Dynamic Currency Words ---
 const getAmountInWords = (amount: number, currency: string = 'INR') => {
-  const whole = Math.floor(amount);
-  const fraction = Math.round((amount - whole) * 100);
-  
-  let currencyName = "Rupees";
-  let fractionName = "Paise";
-  
-  // Normalize code
-  const code = currency.toUpperCase();
+    const whole = Math.floor(amount);
+    const fraction = Math.round((amount - whole) * 100);
 
-  // Broad categorization for common currencies
-  if (['USD', 'CAD', 'AUD', 'SGD', 'NZD'].includes(code)) {
-      currencyName = "Dollars";
-      fractionName = "Cents";
-  } else if (code === 'EUR') {
-      currencyName = "Euros";
-      fractionName = "Cents";
-  } else if (code === 'GBP') {
-      currencyName = "Pounds";
-      fractionName = "Pence";
-  } else if (code === 'AED') {
-      currencyName = "Dirhams";
-      fractionName = "Fils";
-  }
-  
-  // Custom specific overrides if needed
-  if (code === 'CAD') currencyName = "Canadian Dollars";
-  if (code === 'AUD') currencyName = "Australian Dollars";
+    const rawCode = currency ? currency.trim() : 'INR';
+    const code = rawCode.toUpperCase();
 
-  let str = numberToWords(whole) + " " + currencyName;
-  if (fraction > 0) {
-      str += " and " + numberToWords(fraction) + " " + fractionName;
-  }
-  return str + " Only";
+    let currencyName = "";
+    let fractionName = "Cents";
+
+    // Comprehensive currency dictionary
+    const knownCurrencies: Record<string, { name: string; fraction: string }> = {
+        'INR': { name: 'Rupees', fraction: 'Paise' },
+        '₹': { name: 'Rupees', fraction: 'Paise' },
+        'RS': { name: 'Rupees', fraction: 'Paise' },
+        'USD': { name: 'US Dollars', fraction: 'Cents' },
+        'US$': { name: 'US Dollars', fraction: 'Cents' },
+        '$': { name: 'Dollars', fraction: 'Cents' },
+        'EUR': { name: 'Euros', fraction: 'Cents' },
+        '€': { name: 'Euros', fraction: 'Cents' },
+        'GBP': { name: 'Pounds', fraction: 'Pence' },
+        '£': { name: 'Pounds', fraction: 'Pence' },
+        'AUD': { name: 'Australian Dollars', fraction: 'Cents' },
+        'AU$': { name: 'Australian Dollars', fraction: 'Cents' },
+        'CAD': { name: 'Canadian Dollars', fraction: 'Cents' },
+        'CA$': { name: 'Canadian Dollars', fraction: 'Cents' },
+        'SGD': { name: 'Singapore Dollars', fraction: 'Cents' },
+        'SG$': { name: 'Singapore Dollars', fraction: 'Cents' },
+        'S$': { name: 'Singapore Dollars', fraction: 'Cents' },
+        'NZD': { name: 'New Zealand Dollars', fraction: 'Cents' },
+        'NZ$': { name: 'New Zealand Dollars', fraction: 'Cents' },
+        'AED': { name: 'Dirhams', fraction: 'Fils' },
+        'SAR': { name: 'Saudi Riyals', fraction: 'Halalas' },
+        'QAR': { name: 'Qatari Riyals', fraction: 'Dirhams' },
+        'OMR': { name: 'Omani Rials', fraction: 'Baisa' },
+        'KWD': { name: 'Kuwaiti Dinars', fraction: 'Fils' },
+        'BHD': { name: 'Bahraini Dinars', fraction: 'Fils' },
+        'JOD': { name: 'Jordanian Dinars', fraction: 'Piastres' },
+        'CHF': { name: 'Swiss Francs', fraction: 'Rappen' },
+        'JPY': { name: 'Yen', fraction: 'Sen' },
+        '¥': { name: 'Yen', fraction: 'Sen' },
+        'CNY': { name: 'Yuan', fraction: 'Jiao' },
+        'HKD': { name: 'Hong Kong Dollars', fraction: 'Cents' },
+        'HK$': { name: 'Hong Kong Dollars', fraction: 'Cents' },
+        'MYR': { name: 'Ringgit', fraction: 'Sen' },
+        'RM': { name: 'Ringgit', fraction: 'Sen' },
+        'THB': { name: 'Baht', fraction: 'Satang' },
+        '฿': { name: 'Baht', fraction: 'Satang' },
+        'IDR': { name: 'Rupiah', fraction: 'Sen' },
+        'PHP': { name: 'Pesos', fraction: 'Centavos' },
+        '₱': { name: 'Pesos', fraction: 'Centavos' },
+        'ZAR': { name: 'Rand', fraction: 'Cents' },
+        'R': { name: 'Rand', fraction: 'Cents' },
+        'BRL': { name: 'Reais', fraction: 'Centavos' },
+        'R$': { name: 'Reais', fraction: 'Centavos' },
+        'MXN': { name: 'Mexican Pesos', fraction: 'Centavos' },
+        'MEX$': { name: 'Mexican Pesos', fraction: 'Centavos' },
+        'RUB': { name: 'Rubles', fraction: 'Kopecks' },
+        '₽': { name: 'Rubles', fraction: 'Kopecks' },
+        'TRY': { name: 'Lira', fraction: 'Kuruş' },
+        '₺': { name: 'Lira', fraction: 'Kuruş' },
+        'SEK': { name: 'Swedish Kronor', fraction: 'Öre' },
+        'NOK': { name: 'Norwegian Kroner', fraction: 'Øre' },
+        'DKK': { name: 'Danish Kroner', fraction: 'Øre' },
+        'EGP': { name: 'Egyptian Pounds', fraction: 'Piastres' }
+    };
+
+    if (knownCurrencies[code]) {
+        currencyName = knownCurrencies[code].name;
+        fractionName = knownCurrencies[code].fraction;
+    } else {
+        // Dynamic fallback for custom user-created currency
+        currencyName = rawCode;
+        fractionName = "Cents";
+    }
+
+    let str = numberToWords(whole) + " " + currencyName;
+    if (fraction > 0) {
+        str += " and " + numberToWords(fraction) + " " + fractionName;
+    }
+    return str + " Only";
 };
 
 export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => {
-  try {
-    // 1. Data Setup
-    const items = Array.isArray(invoice.line_items) ? invoice.line_items : [];
-    const tax = invoice.tax_summary || { taxType: 'IGST', breakdown: { cgst: 0, sgst: 0, igst: 0 } };
-    const profile = ownerProfile?.json_value || {};
-    
-    // Fallback to INR if currency is missing (legacy invoices)
-    const currency = invoice.currency || 'INR';
-    
-    // Generate words based on currency
-    const amountInWords = getAmountInWords(Number(invoice.grand_total), currency);
-        
-    const getCurrencySymbol = (code: string) => {
-      if (!code) return '₹';
-      const map: Record<string, string> = {
-        'AUD': 'AUD', 'AU$': 'AUD',
-        'SGD': 'SGD', 'S$': 'SGD', 'SG$': 'SGD',
-        'USD': 'US$', 'US$': 'US$',
-        'CAD': 'CAD', 'CA$': 'CAD',
-        'INR': '₹', '₹': '₹',
-        'EUR': '€', '€': '€',
-        'GBP': '£', '£': '£',
-        'AED': 'AED', 'JPY': '¥'
-      };
-      return map[code.toUpperCase()] || map[code] || code;
-    };
+    try {
+        // 1. Data Setup
+        const items = Array.isArray(invoice.line_items) ? invoice.line_items : [];
+        const tax = invoice.tax_summary || { taxType: 'IGST', breakdown: { cgst: 0, sgst: 0, igst: 0 } };
+        const profile = ownerProfile?.json_value || {};
 
-    const formatCurrency = (amount: any) => {
-      const val = Number(amount) || 0;
-      const numStr = new Intl.NumberFormat('en-IN', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      }).format(val);
-      const symbol = getCurrencySymbol(currency);
-      return `${symbol} ${numStr}`;
-    };
+        // Fallback to INR if currency is missing (legacy invoices)
+        const currency = invoice.currency || 'INR';
 
-    const formatDate = (dateString: any) => {
-      try {
-        return dateString ? format(new Date(dateString), "dd MMMM yyyy") : '-';
-      } catch (e) { return '-'; }
-    };
+        // Generate words based on currency
+        const amountInWords = getAmountInWords(Number(invoice.grand_total), currency);
 
-    // 3. Image Loader
-    const getImageUrl = (webPath: string) => {
-        if (!webPath) return null;
-        const port = process.env.PORT || 5000;
-        const baseUrl = `http://localhost:${port}`;
-        
-        if (webPath.startsWith('/uploads')) {
-            return `${baseUrl}${webPath}`;
-        }
-        return webPath; 
-    };
+        const getCurrencySymbol = (code: string) => {
+            if (!code) return '₹';
+            const map: Record<string, string> = {
+                'AUD': 'AUD', 'AU$': 'AUD',
+                'SGD': 'SGD', 'S$': 'SGD', 'SG$': 'SGD',
+                'USD': 'US$', 'US$': 'US$',
+                'CAD': 'CAD', 'CA$': 'CAD',
+                'INR': '₹', '₹': '₹',
+                'EUR': '€', '€': '€',
+                'GBP': '£', '£': '£',
+                'AED': 'AED', 'JPY': '¥'
+            };
+            return map[code.toUpperCase()] || map[code] || code;
+        };
 
-    const logoSrc = getImageUrl(profile.logo);
-    const signatureSrc = getImageUrl(profile.signature);
-    const stampSrc = getImageUrl(profile.stamp);
+        const formatCurrency = (amount: any) => {
+            const val = Number(amount) || 0;
+            const numStr = new Intl.NumberFormat('en-IN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(val);
+            const symbol = getCurrencySymbol(currency);
+            return `${symbol} ${numStr}`;
+        };
 
-    // 4. Tax Logic
-    // Only show granular tax rows if tax exists
-    let taxRows = '';
-    const cgst = tax.breakdown?.cgst || 0;
-    const sgst = tax.breakdown?.sgst || 0;
-    const igst = tax.breakdown?.igst || 0;
-    const rate = tax.gstRate || 0;
+        const formatDate = (dateString: any) => {
+            try {
+                return dateString ? format(new Date(dateString), "dd MMMM yyyy") : '-';
+            } catch (e) { return '-'; }
+        };
 
-    // Logic: If there is tax, show the breakdown. If export/exempt, show dashes or specific labels.
-    if (tax.taxType === 'CGST_SGST' || (cgst > 0)) {
-        taxRows += `
-          <tr><td>SGST (${rate/2}%)</td><td>${formatCurrency(sgst)}</td></tr>
-          <tr><td>CGST (${rate/2}%)</td><td>${formatCurrency(cgst)}</td></tr>
+        // 3. Image Loader
+        const getImageUrl = (webPath: string) => {
+            if (!webPath) return null;
+            const port = process.env.PORT || 5000;
+            const baseUrl = `http://localhost:${port}`;
+
+            if (webPath.startsWith('/uploads')) {
+                return `${baseUrl}${webPath}`;
+            }
+            return webPath;
+        };
+
+        const logoSrc = getImageUrl(profile.logo);
+        const signatureSrc = getImageUrl(profile.signature);
+        const stampSrc = getImageUrl(profile.stamp);
+
+        // 4. Tax Logic
+        // Only show granular tax rows if tax exists
+        let taxRows = '';
+        const cgst = tax.breakdown?.cgst || 0;
+        const sgst = tax.breakdown?.sgst || 0;
+        const igst = tax.breakdown?.igst || 0;
+        const rate = tax.gstRate || 0;
+
+        // Logic: If there is tax, show the breakdown. If export/exempt, show dashes or specific labels.
+        if (tax.taxType === 'CGST_SGST' || (cgst > 0)) {
+            taxRows += `
+          <tr><td>SGST (${rate / 2}%)</td><td>${formatCurrency(sgst)}</td></tr>
+          <tr><td>CGST (${rate / 2}%)</td><td>${formatCurrency(cgst)}</td></tr>
           <tr><td>IGST</td><td>——</td></tr>
         `;
-    } else if (tax.taxType === 'IGST' || (igst > 0)) {
-        taxRows += `
+        } else if (tax.taxType === 'IGST' || (igst > 0)) {
+            taxRows += `
             <tr><td>SGST</td><td>——</td></tr>
             <tr><td>CGST</td><td>——</td></tr>
             <tr><td>IGST (${rate}%)</td><td>${formatCurrency(igst)}</td></tr>
         `;
-    } else {
-        // Optional: Leave empty for non-tax invoices or Export
-        taxRows += `
+        } else {
+            // Optional: Leave empty for non-tax invoices or Export
+            taxRows += `
             <tr><td>SGST</td><td>——</td></tr>
             <tr><td>CGST</td><td>——</td></tr>
             <tr><td>IGST</td><td>——</td></tr>
         `;
-    }
+        }
 
-    // 5. HTML Template
-    return `
+        // 5. HTML Template
+        return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -588,7 +635,7 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
 </html>
     `;
 
-  } catch (error) {
-    return `<html><body><h1>Error</h1><pre>${error}</pre></body></html>`;
-  }
+    } catch (error) {
+        return `<html><body><h1>Error</h1><pre>${error}</pre></body></html>`;
+    }
 };

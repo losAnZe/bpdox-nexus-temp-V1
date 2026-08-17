@@ -256,11 +256,11 @@ router.get('/stats', checkPermission('dashboard', 'view'), async (req: Request, 
     // 3. MONTHLY STATS (Charts)
     // ==================================================================================
     if (shouldFetch('monthlyStats')) {
-        // A. Invoices (Current Period) - Issued Invoices (except Draft/Cancelled/Void)
+        // A. Invoices (Current Period) - Only Paid Invoices
         const periodInvoices = await prisma.invoice.findMany({
             where: {
-                status: { notIn: ['DRAFT', 'Draft', 'CANCELLED', 'Cancelled', 'VOID', 'Void'] },
-                issue_date: { gte: fromDate, lte: toDate }
+                status: { in: ['PAID', 'Paid'] },
+                payment_date: { gte: fromDate, lte: toDate }
             },
             select: { issue_date: true, payment_date: true, grand_total: true, received_amount: true }
         });

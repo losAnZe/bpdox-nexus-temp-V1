@@ -247,6 +247,11 @@ export default function DashboardPage() {
   // --- GLOBAL FILTER HANDLER ---
   const handleFilterChange = async (filter: string, range?: DateRange) => {
     setOverviewFilter(filter);
+    setHistoryFilter(filter);
+    setHistoryCustomRange(range);
+    setMonthlyPerformanceFilter(filter);
+    setMonthlyPerformanceCustomRange(range);
+
     if (range) {
         setDateRange(range);
     } else if (filter !== 'custom') {
@@ -574,7 +579,7 @@ export default function DashboardPage() {
             description="Cumulative business assets over selected range"
         >
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                <AreaChart data={historyWithBalance}>
+                <AreaChart data={filteredHistoryWithBalance}>
                     <defs>
                         <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>

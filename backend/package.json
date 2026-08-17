@@ -4,7 +4,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon index.ts",
-    "build": "tsc",
+    "build": "tsc && node -e \"if (require('fs').existsSync('fonts')) require('fs').cpSync('fonts', 'dist/fonts', {recursive: true});\"",
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push"
