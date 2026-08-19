@@ -55,15 +55,15 @@ export const generateLedgerHTML = (transactions: any[], dateRange: string, owner
           font-weight: 100 900;
           font-style: normal;
         }
-        body { font-family: 'Red Hat Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px; color: #1e293b; }
-        .header { display: flex; justify-content: space-between; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
-        .title { font-size: 24px; font-weight: 800; color: #2563eb; letter-spacing: -0.02em; }
-        .subtitle { font-size: 13px; color: #64748b; margin-top: 4px; font-weight: 500; }
-        .meta { text-align: right; font-size: 12px; line-height: 1.5; color: #475569; }
+        body { font-family: 'Red Hat Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; padding: 40px; color: #0f172a; -webkit-font-smoothing: antialiased; }
+        .header { display: flex; justify-content: space-between; margin-bottom: 30px; border-bottom: 2px solid #cbd5e1; padding-bottom: 20px; }
+        .title { font-size: 24px; font-weight: 800; color: #1d4ed8; letter-spacing: -0.02em; }
+        .subtitle { font-size: 13px; color: #475569; margin-top: 4px; font-weight: 600; }
+        .meta { text-align: right; font-size: 12px; line-height: 1.5; color: #334155; font-weight: 500; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
-        th { background: #f8fafc; padding: 10px; text-align: left; border-bottom: 2px solid #cbd5e1; font-weight: 700; color: #334155; }
-        td { padding: 10px; border-bottom: 1px solid #e2e8f0; }
+        th { background: #f1f5f9; padding: 10px; text-align: left; border-bottom: 2px solid #94a3b8; font-weight: 700; color: #0f172a; }
+        td { padding: 10px; border-bottom: 1px solid #cbd5e1; font-weight: 500; color: #1e293b; }
         .text-right { text-align: right; }
         .text-green { color: #16a34a; font-weight: 600; }
         .text-red { color: #dc2626; font-weight: 600; }

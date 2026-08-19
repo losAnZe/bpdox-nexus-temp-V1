@@ -239,10 +239,12 @@ export const generateInvoiceHTML = (invoice: any, ownerProfile: any): string => 
     body {
         font-family: 'Red Hat Display', sans-serif;
         font-size: 12pt;
-        color: var(--text);
+        font-weight: 500;
+        color: #111827;
         margin: 0;
         padding: 40px 50px;
         background: #fff;
+        -webkit-font-smoothing: antialiased;
     }
 
     /* Wrapper */

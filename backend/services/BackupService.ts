@@ -1,4 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
+import fs from 'fs';
+import path from 'path';
+import AdmZip from 'adm-zip';
 
 const prisma = new PrismaClient();
 
@@ -248,5 +251,89 @@ export class BackupService {
     });
 
     return true;
+  }
+
+  /**
+   * Export Full System Backup Package (.zip) containing:
+   * 1. Database .iec file
+   * 2. Uploads directory (logos, signatures, asset PDFs)
+   * 3. Encrypted vault-files directory
+   * (Excludes .env secret keys for zero-knowledge security)
+   */
+  static async exportFullZip(): Promise<Buffer> {
+    console.log("Generating Full System ZIP Backup Archive (Zero-Knowledge)...");
+    const zip = new AdmZip();
+
+    // 1. Export database .iec data
+    const iecData = await this.exportData();
+    const dateStr = new Date().toISOString().split('T')[0];
+    zip.addFile(`bpdoxs-database-${dateStr}.iec`, Buffer.from(iecData, 'utf-8'));
+
+    // 2. Include uploads directory
+    const rootPath = process.cwd().endsWith('backend') ? '..' : '.';
+    const uploadsDir = path.join(process.cwd(), rootPath, 'frontend/public/uploads');
+    if (fs.existsSync(uploadsDir)) {
+      zip.addLocalFolder(uploadsDir, 'uploads');
+    }
+
+    // 3. Include vault-files directory
+    const vaultFilesDir = path.join(process.cwd(), rootPath, 'vault-files');
+    if (fs.existsSync(vaultFilesDir)) {
+      zip.addLocalFolder(vaultFilesDir, 'vault-files');
+    }
+
+    return zip.toBuffer();
+  }
+
+  /**
+   * Import Full System Backup Package (.zip)
+   */
+  static async importFullZip(zipBuffer: Buffer): Promise<{ restoredData: boolean; restoredFiles: number }> {
+    console.log("Restoring Full System ZIP Backup Package...");
+    const zip = new AdmZip(zipBuffer);
+    const zipEntries = zip.getEntries();
+
+    let restoredData = false;
+    let restoredFiles = 0;
+
+    const rootPath = process.cwd().endsWith('backend') ? '..' : '.';
+    const uploadsDir = path.join(process.cwd(), rootPath, 'frontend/public/uploads');
+    const vaultFilesDir = path.join(process.cwd(), rootPath, 'vault-files');
+
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+    if (!fs.existsSync(vaultFilesDir)) fs.mkdirSync(vaultFilesDir, { recursive: true });
+
+    for (const entry of zipEntries) {
+      if (entry.isDirectory) continue;
+
+      const entryName = entry.entryName;
+
+      // 1. Database .iec file
+      if (entryName.endsWith('.iec')) {
+        const iecContent = entry.getData().toString('utf-8');
+        await this.importData(iecContent);
+        restoredData = true;
+      }
+      // 2. Uploads directory files
+      else if (entryName.startsWith('uploads/')) {
+        const fileName = entryName.replace(/^uploads\//, '');
+        if (fileName) {
+          const destPath = path.join(uploadsDir, fileName);
+          fs.writeFileSync(destPath, entry.getData());
+          restoredFiles++;
+        }
+      }
+      // 4. Vault files directory files
+      else if (entryName.startsWith('vault-files/')) {
+        const fileName = entryName.replace(/^vault-files\//, '');
+        if (fileName) {
+          const destPath = path.join(vaultFilesDir, fileName);
+          fs.writeFileSync(destPath, entry.getData());
+          restoredFiles++;
+        }
+      }
+    }
+
+    return { restoredData, restoredFiles };
   }
 }

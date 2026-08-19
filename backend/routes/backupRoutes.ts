@@ -33,13 +33,46 @@ router.post('/import', authorize(['SUDO_ADMIN']), upload.single('file'), async (
     const fileContent = req.file.buffer.toString('utf-8');
     await BackupService.importData(fileContent);
 
-    const authReq = req as AuthRequest;
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    await ActivityService.log(authReq.user.id, "RESTORE_BACKUP", "Restored System Data", "SYSTEM", "BACKUP", ip as string);
-
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// GET: Export Full System ZIP Backup (Sudo Only)
+router.get('/export-zip', authorize(['SUDO_ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const zipBuffer = await BackupService.exportFullZip();
+    const filename = `bpdoxs-full-system-backup-${new Date().toISOString().split('T')[0]}.zip`;
+
+    const authReq = req as AuthRequest;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    await ActivityService.log(authReq.user.id, "EXPORT_FULL_ZIP", "Downloaded full system ZIP backup package", "SYSTEM", "BACKUP", ip as string);
+
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.setHeader('Content-Type', 'application/zip');
+    res.send(zipBuffer);
+  } catch (error: any) {
+    console.error("ZIP Export Error:", error);
+    res.status(500).json({ error: error.message || "ZIP Backup export failed" });
+  }
+});
+
+// POST: Import Full System ZIP Backup (Sudo Only)
+router.post('/import-zip', authorize(['SUDO_ADMIN']), upload.single('file'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No zip file provided" });
+
+    const result = await BackupService.importFullZip(req.file.buffer);
+
+    const authReq = req as AuthRequest;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    await ActivityService.log(authReq.user.id, "RESTORE_FULL_ZIP", `Restored Full System ZIP Package (${result.restoredFiles} files)`, "SYSTEM", "BACKUP", ip as string);
+
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error("ZIP Restore Error:", error);
+    res.status(500).json({ error: error.message || "ZIP Restore failed" });
   }
 });
 
